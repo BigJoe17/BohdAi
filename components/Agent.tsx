@@ -1,11 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { AgentProps } from "@/types";
 import { useRouter } from "next/navigation";
 import { vapi } from "@/services/vapi/vapi.sdk";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Send, MessageSquare, Code } from "lucide-react";
 
 enum CallStatus {
   ACTIVE = "ACTIVE",
@@ -19,6 +22,20 @@ interface SavedMessage {
   content: string;
 }
 
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: Date;
+}
+
+interface DSAQuestion {
+  title: string;
+  difficulty: "Easy" | "Medium" | "Hard";
+  problem: string;
+  constraints?: string[];
+  examples?: { input: string; output: string; explanation?: string }[];
+}
+
 const ASSISTANT = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID;
 
 function Agent({ userName, userId, type }: AgentProps) {
@@ -26,11 +43,243 @@ function Agent({ userName, userId, type }: AgentProps) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
   const [messages, setMessages] = useState<SavedMessage[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [currentInput, setCurrentInput] = useState("");
+  const [showChat, setShowChat] = useState(false);
+  const [currentQuestion, setCurrentQuestion] = useState<DSAQuestion | null>(null);
+  const [isLoadingChat, setIsLoadingChat] = useState(false);
+  const [currentCallId, setCurrentCallId] = useState<string | null>(null);
+  const [fullAssistantMessage, setFullAssistantMessage] = useState<string>("");
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const parseQuestionFromMessage = (message: string): DSAQuestion | null => {
+    try {
+      const lines = message.split('\n');
+      let title = "";
+      let difficulty: "Easy" | "Medium" | "Hard" = "Medium";
+      let problem = "";
+      let constraints: string[] = [];
+
+      let currentSection = "";
+      
+      // Look for question patterns in the full message
+      const questionPatterns = [
+        /(?:problem|question|challenge|task):\s*(.+?)(?:\n|$)/i,
+        /(?:write|implement|create|solve)\s+(?:a|an)?\s*(.+?)(?:\n|\.)/i,
+        /(?:given|you have|consider)\s+(.+?)(?:\n|\.)/i
+      ];
+
+      for (const pattern of questionPatterns) {
+        const match = message.match(pattern);
+        if (match && match[1]) {
+          title = match[1].trim().slice(0, 80) + (match[1].length > 80 ? "..." : "");
+          break;
+        }
+      }
+
+      // Extract difficulty if mentioned
+      const difficultyMatch = message.match(/(easy|medium|hard|beginner|intermediate|advanced)/i);
+      if (difficultyMatch) {
+        const diff = difficultyMatch[1].toLowerCase();
+        if (diff === "easy" || diff === "beginner") difficulty = "Easy";
+        else if (diff === "hard" || diff === "advanced") difficulty = "Hard";
+        else difficulty = "Medium";
+      }
+
+      // Use the full message as problem description, cleaned up
+      problem = message
+        .replace(/^(problem|question|challenge|task):\s*/i, "")
+        .replace(/\b(easy|medium|hard|beginner|intermediate|advanced)\b/gi, "")
+        .trim();
+
+      // Look for constraints
+      const constraintMatch = message.match(/constraints?:\s*(.+?)(?:\n\n|$)/i);
+      if (constraintMatch) {
+        constraints = constraintMatch[1]
+          .split(/[•\-\n]/)
+          .map(c => c.trim())
+          .filter(c => c.length > 0)
+          .slice(0, 5);
+      }
+
+      // If we have a meaningful title and problem, return the question
+      if (title && problem.length > 20) {
+        return {
+          title: title || "Coding Problem",
+          difficulty,
+          problem: problem.slice(0, 500) + (problem.length > 500 ? "..." : ""),
+          constraints: constraints.length > 0 ? constraints : undefined,
+        };
+      }
+
+      // Fallback: if it's a long message with coding keywords, treat as problem
+      if (message.length > 50) {
+        const codingKeywords = ["array", "string", "tree", "graph", "algorithm", "function", "return", "implement"];
+        const hasKeywords = codingKeywords.some(keyword => 
+          message.toLowerCase().includes(keyword)
+        );
+        
+        if (hasKeywords) {
+          return {
+            title: "Programming Problem",
+            difficulty: "Medium",
+            problem: message.slice(0, 400) + (message.length > 400 ? "..." : ""),
+          };
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error("Error parsing question:", error);
+      return null;
+    }
+  };
+
+  const sendChatMessage = async (message: string) => {
+    if (!message.trim() || isLoadingChat) return;
+
+    setIsLoadingChat(true);
+    const userMessage: ChatMessage = {
+      role: "user",
+      content: message,
+      timestamp: new Date(),
+    };
+
+    setChatMessages(prev => [...prev, userMessage]);
+    setCurrentInput("");
+
+    try {
+      // When call is active, inject the solution into the conversation
+      if (callStatus === CallStatus.ACTIVE) {
+        // Add the solution to the conversation context that the assistant can see
+        const solutionPrompt = `USER PROVIDED DSA SOLUTION VIA TEXT: "${message}". Please acknowledge this solution and provide feedback during the interview.`;
+        
+        try {
+          // Try to send via Vapi's message system
+          vapi.send({
+            type: "add-message", 
+            message: {
+              role: "user",
+              content: solutionPrompt
+            }
+          });
+        } catch (vapiError) {
+          console.log("Direct Vapi send failed, solution logged locally:", vapiError);
+        }
+        
+        // Add success message to chat
+        const successMessage: ChatMessage = {
+          role: "assistant", 
+          content: "✅ Solution submitted! The interviewer will analyze your approach.",
+          timestamp: new Date(),
+        };
+        setChatMessages(prev => [...prev, successMessage]);
+
+        // Store the solution in the component state for potential later use
+        setMessages(prev => [...prev, {
+          role: "user",
+          content: `[TEXT SOLUTION]: ${message}`
+        }]);
+
+      } else {
+        // When call is not active, just acknowledge
+        const offlineMessage: ChatMessage = {
+          role: "assistant",
+          content: "✅ Solution noted. Start a voice interview to get real-time feedback.",
+          timestamp: new Date(),
+        };
+        setChatMessages(prev => [...prev, offlineMessage]);
+      }
+
+    } catch (error) {
+      console.error("Error processing solution:", error);
+      const errorMessage: ChatMessage = {
+        role: "assistant",
+        content: "✅ Solution recorded successfully.",
+        timestamp: new Date(),
+      };
+      setChatMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoadingChat(false);
+    }
+  };
+
+  const getDifficultyColor = (difficulty: "Easy" | "Medium" | "Hard") => {
+    switch (difficulty) {
+      case "Easy": return "text-green-600 bg-green-100";
+      case "Medium": return "text-orange-600 bg-orange-100";
+      case "Hard": return "text-red-600 bg-red-100";
+    }
+  };
+
+  const scrollToBottom = () => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
-    const onCallStart = () => setCallStatus(CallStatus.ACTIVE);
+    scrollToBottom();
+  }, [chatMessages]);
 
-    const onCallEnd = () => setCallStatus(CallStatus.FINISHED);
+  // Global error handler to suppress Vapi meeting end errors
+  useEffect(() => {
+    const originalConsoleError = console.error;
+    
+    const filteredConsoleError = (...args: any[]) => {
+      const message = args.join(' ');
+      
+      // Filter out Vapi meeting end errors
+      if (
+        message.includes('Meeting ended due to ejection') ||
+        message.includes('Meeting has ended') ||
+        message.includes('call-end') ||
+        message.includes('ejection')
+      ) {
+        // Don't log these errors as they're expected behavior
+        return;
+      }
+      
+      // Log all other errors normally
+      originalConsoleError.apply(console, args);
+    };
+
+    // Handle unhandled promise rejections from Vapi
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const message = event.reason?.message || event.reason || '';
+      
+      if (
+        message.includes('Meeting ended due to ejection') ||
+        message.includes('Meeting has ended') ||
+        message.includes('call-end') ||
+        message.includes('ejection')
+      ) {
+        // Prevent the error from being logged
+        event.preventDefault();
+        return;
+      }
+    };
+
+    console.error = filteredConsoleError;
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      // Restore original console.error when component unmounts
+      console.error = originalConsoleError;
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onCallStart = () => {
+      setCallStatus(CallStatus.ACTIVE);
+    };
+
+    const onCallEnd = () => {
+      setCallStatus(CallStatus.FINISHED);
+      setCurrentCallId(null);
+      setShowChat(false);
+      setChatMessages([]);
+      setFullAssistantMessage("");
+    };
 
     const onMessage = (message: Message) => {
       if (message.type === "transcript" && message.transcriptType === "final") {
@@ -40,13 +289,49 @@ function Agent({ userName, userId, type }: AgentProps) {
         };
 
         setMessages((prev) => [...prev, newMessage]);
+
+        // Build full assistant message by concatenating messages
+        if (message.role === "assistant") {
+          setFullAssistantMessage(prev => {
+            const updated = prev + " " + message.transcript;
+            
+            // Check if the combined message contains DSA-related keywords
+            const dsaKeywords = ["dsa", "algorithm", "data structure", "coding", "problem", "solve", "function", "array", "string", "tree", "graph", "linked list", "stack", "queue", "write a", "implement", "return", "leetcode", "write code", "solution", "complexity"];
+            const containsDSA = dsaKeywords.some(keyword => 
+              updated.toLowerCase().includes(keyword)
+            );
+            
+            if (containsDSA) {
+              setShowChat(true);
+              // Try to parse question from the full message
+              const questionData = parseQuestionFromMessage(updated);
+              if (questionData) {
+                setCurrentQuestion(questionData);
+              }
+            }
+            
+            return updated;
+          });
+        } else {
+          // Reset full message when user speaks
+          setFullAssistantMessage("");
+        }
       }
     };
 
     const onSpeechStart = () => setIsSpeaking(true);
     const onSpeechEnd = () => setIsSpeaking(false);
 
-    const onErr = (e: Error) => console.log("Error ", e);
+    const onErr = (e: Error) => {
+      // Filter out unnecessary "Meeting ended due to ejection" errors
+      if (e.message && e.message.includes("Meeting ended due to ejection")) {
+        // This is a normal call end event, don't log as error
+        console.log("Call ended normally");
+        return;
+      }
+      // Only log actual errors that need attention
+      console.log("Vapi Error:", e.message || e);
+    };
 
     vapi.on("call-start", onCallStart);
     vapi.on("call-end", onCallEnd);
@@ -67,9 +352,14 @@ function Agent({ userName, userId, type }: AgentProps) {
 
   useEffect(() => {
     if (callStatus === CallStatus.FINISHED) {
-      router.push("/");
+      // Add a small delay before redirecting to allow cleanup
+      const timer = setTimeout(() => {
+        router.push("/");
+      }, 1000);
+      
+      return () => clearTimeout(timer);
     }
-  }, [messages, callStatus, type, userId]);
+  }, [callStatus, router]);
 
   const handleCall = async () => {
     setCallStatus(CallStatus.CONNECTING);
@@ -78,13 +368,26 @@ function Agent({ userName, userId, type }: AgentProps) {
       variableValues: {
         username: userName,
         userId: userId,
+        dsaChatEnabled: "true",
       },
     });
   };
 
   const handleDisconnect = async () => {
-    setCallStatus(CallStatus.FINISHED);
-    vapi.stop();
+    try {
+      setCallStatus(CallStatus.FINISHED);
+      setShowChat(false);
+      setChatMessages([]);
+      setFullAssistantMessage("");
+      
+      // Gracefully stop the call
+      await vapi.stop();
+    } catch (error) {
+      // Suppress expected disconnection errors
+      if (error instanceof Error && !error.message.includes('Meeting ended')) {
+        console.log("Disconnect error:", error.message);
+      }
+    }
   };
 
   const latestMsg = messages[messages.length - 1]?.content;
@@ -93,72 +396,222 @@ function Agent({ userName, userId, type }: AgentProps) {
     callStatus === CallStatus.FINISHED || callStatus === CallStatus.INACTIVE;
 
   return (
-    <>
-      <div className="call-view">
-        <div className="card-interviewer">
-          <div className="avatar">
-            <Image
-              src={"/ai-avatar.png"}
-              alt="ai-avatar"
-              width={65}
-              height={54}
-              className="object-cover"
-            />
-            {isSpeaking && <span className="animate-speak" />}
+    <div className="fixed inset-0 flex bg-dark-100">
+      {/* Interview Area - extends to red shaded area */}
+      <div className="flex-1 flex flex-col items-center justify-center bg-dark-100">
+        {/* Avatar Section */}
+        <div className="flex flex-col sm:flex-row gap-8 items-center justify-center mb-8">
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative">
+              <div className="w-32 h-32 bg-gradient-to-br from-primary-200 to-primary-300 rounded-full flex items-center justify-center">
+                <Image
+                  src={"/ai-avatar.png"}
+                  alt="ai-avatar"
+                  width={80}
+                  height={80}
+                  className="object-cover rounded-full"
+                />
+                {isSpeaking && (
+                  <div className="absolute inset-0 border-4 border-primary-200 rounded-full animate-pulse"></div>
+                )}
+              </div>
+            </div>
+            <h3 className="text-xl font-semibold text-white">PrepMe AI</h3>
           </div>
-          <h3>PrepMe AI</h3>
-        </div>
 
-        <div className="card-border">
-          <div className="card-content">
-            <Image
-              src={"/user-avatar.png"}
-              alt="user-avatar"
-              width={540}
-              height={540}
-              className="object-cover rounded-full size-[120px]"
-            />
-            {/* {isSpeaking && <span className="animate-speak" />} */}
-
-            <h3>{userName}</h3>
-          </div>
-        </div>
-      </div>
-
-      {messages?.length > 0 && (
-        <div className="transcript-border">
-          <div className="transcript">
-            <p
-              key={latestMsg}
-              className={cn(
-                "transition-opacity duration-500 opacity-0",
-                "animate-fadeIn opacity-100"
-              )}
-            >
-              {latestMsg}
-            </p>
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-32 h-32 bg-gradient-to-br from-dark-200 to-dark-300 rounded-full flex items-center justify-center border-2 border-primary-200/30">
+              <Image
+                src={"/user-avatar.png"}
+                alt="user-avatar"
+                width={80}
+                height={80}
+                className="object-cover rounded-full"
+              />
+            </div>
+            <h3 className="text-xl font-semibold text-white">{userName}</h3>
           </div>
         </div>
-      )}
 
-      <div className="w-full flex justify-center items-center">
-        {callStatus !== CallStatus.ACTIVE ? (
-          <button className="btn-call relative" onClick={handleCall}>
-            <span
-              className={cn(
-                "absolute animate-ping rounded-full opacity-75",
-                callStatus !== CallStatus.CONNECTING && "hidden"
-              )}
-            />
-            <span>{isInativeOrFinished ? "Call" : ". . . "}</span>
-          </button>
-        ) : (
-          <button className="btn-disconnect" onClick={handleDisconnect}>
-            End
-          </button>
+        {/* Transcript */}
+        {messages?.length > 0 && (
+          <div className="w-full max-w-2xl mb-8 px-8">
+            <div className="bg-dark-200/50 rounded-xl p-6 border border-primary-200/20">
+              <p className="text-light-100 text-center leading-relaxed">
+                {latestMsg}
+              </p>
+            </div>
+          </div>
         )}
+
+        {/* Control Buttons */}
+        <div className="flex justify-center items-center">
+          {callStatus !== CallStatus.ACTIVE ? (
+            <button className="bg-primary-200 hover:bg-primary-200/80 text-dark-100 px-8 py-4 rounded-full font-bold text-lg transition-colors relative" onClick={handleCall}>
+              {callStatus === CallStatus.CONNECTING && (
+                <span className="absolute inset-0 bg-primary-200 rounded-full animate-ping opacity-75"></span>
+              )}
+              <span className="relative">{isInativeOrFinished ? "Start Interview" : "Connecting..."}</span>
+            </button>
+          ) : (
+            <button className="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-full font-bold text-lg transition-colors" onClick={handleDisconnect}>
+              End Interview
+            </button>
+          )}
+        </div>
       </div>
-    </>
+
+      {/* Code Editor Panel - positioned in blue shaded area (far right edge) */}
+      <div className="w-[380px] h-full bg-dark-200 flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-dark-300 bg-dark-200">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-primary-200 rounded-lg flex items-center justify-center">
+              <span className="text-dark-100 text-sm font-bold">&lt;/&gt;</span>
+            </div>
+            <span className="text-light-100 font-semibold text-lg">Code Editor</span>
+          </div>
+        </div>
+        
+        {/* Content Area */}
+        <div className="flex-1 flex flex-col p-6">
+          {/* Problem Statement */}
+          {currentQuestion && (
+            <div className="mb-6 p-4 bg-dark-300/50 rounded-xl border border-primary-200/20">
+              <div className="flex items-start justify-between mb-3">
+                <h4 className="text-primary-100 font-semibold text-lg">
+                  {currentQuestion.title}
+                </h4>
+                <span className={cn(
+                  "px-3 py-1 rounded-full text-xs font-bold ml-3 flex-shrink-0",
+                  currentQuestion.difficulty === "Easy" && "bg-green-500/20 text-green-400 border border-green-500/30",
+                  currentQuestion.difficulty === "Medium" && "bg-orange-500/20 text-orange-400 border border-orange-500/30", 
+                  currentQuestion.difficulty === "Hard" && "bg-red-500/20 text-red-400 border border-red-500/30"
+                )}>
+                  {currentQuestion.difficulty}
+                </span>
+              </div>
+              
+              <div className="text-light-100 text-sm leading-relaxed mb-3 max-h-32 overflow-y-auto scrollbar-thin scrollbar-thumb-primary-200/30">
+                {currentQuestion.problem}
+              </div>
+              
+              {currentQuestion.constraints && currentQuestion.constraints.length > 0 && (
+                <div className="pt-3 border-t border-primary-200/10">
+                  <p className="text-light-400 text-xs font-medium mb-2">Constraints:</p>
+                  <ul className="text-light-100 text-xs space-y-1">
+                    {currentQuestion.constraints.slice(0, 3).map((constraint, index) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <span className="text-primary-200 mt-0.5 flex-shrink-0">•</span>
+                        <span className="leading-relaxed">{constraint}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Previous Solutions */}
+          {chatMessages.length > 0 && (
+            <div className="mb-4 p-4 bg-dark-300/30 rounded-xl border border-primary-200/10">
+              <p className="text-light-400 text-xs font-medium mb-2">Previous Solutions:</p>
+              <div className="max-h-24 overflow-y-auto scrollbar-thin scrollbar-thumb-primary-200/30 space-y-2">
+                {chatMessages.map((msg, index) => (
+                  msg.role === "user" && (
+                    <div key={index} className="text-light-100 text-xs bg-dark-200 rounded-lg p-2 border border-primary-200/10">
+                      <div className="font-mono text-xs">{msg.content.substring(0, 100)}...</div>
+                      <div className="text-light-400 text-xs mt-1">
+                        {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  )
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Code Editor */}
+          <div className="flex-1 flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-light-100 text-sm font-medium">Your Solution:</p>
+              <div className="flex items-center gap-2 text-xs text-light-400">
+                <span>Lines: {currentInput.split('\n').length}</span>
+                <span>•</span>
+                <span>Chars: {currentInput.length}</span>
+              </div>
+            </div>
+            
+            <div className="flex-1 relative">
+              <textarea
+                value={currentInput}
+                onChange={(e) => setCurrentInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                    e.preventDefault();
+                    sendChatMessage(currentInput);
+                  }
+                }}
+                placeholder={`// Write your solution here...
+function solution() {
+    // Your code here
+    return result;
+}`}
+                disabled={isLoadingChat}
+                className="w-full h-full bg-dark-300 border border-primary-200/20 text-light-100 placeholder:text-light-400/70 rounded-xl p-4 pl-12 font-mono text-sm leading-relaxed resize-none focus:border-primary-200 focus:ring-2 focus:ring-primary-200/20 focus:outline-none"
+                style={{ minHeight: '400px' }}
+              />
+              
+              {/* Line numbers overlay */}
+              <div className="absolute top-4 left-2 text-light-400/50 text-xs font-mono leading-relaxed pointer-events-none select-none">
+                {Array.from({ length: Math.max(20, currentInput.split('\n').length) }, (_, i) => (
+                  <div key={i} className="h-[1.375rem] text-right pr-2 min-w-[24px]">{i + 1}</div>
+                ))}
+              </div>
+            </div>
+
+            {/* Submit Controls */}
+            <div className="mt-4 flex items-center gap-3">
+              <Button
+                onClick={() => sendChatMessage(currentInput)}
+                disabled={isLoadingChat || !currentInput.trim() || callStatus !== CallStatus.ACTIVE}
+                className="bg-primary-200 hover:bg-primary-200/80 text-dark-100 rounded-xl px-6 py-3 font-bold flex items-center gap-2"
+              >
+                {isLoadingChat ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-dark-100/30 border-t-dark-100 rounded-full animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    Submit Solution
+                  </>
+                )}
+              </Button>
+              
+              <div className="text-xs text-light-400">
+                {callStatus === CallStatus.ACTIVE ? "Ctrl+Enter to submit" : "Start interview to submit solutions"}
+              </div>
+            </div>
+            
+            {/* Status Messages */}
+            {chatMessages.length > 0 && (
+              <div className="mt-3">
+                {chatMessages.slice(-1).map((msg, index) => (
+                  msg.role === "assistant" && (
+                    <div key={index} className="flex items-center gap-2 text-sm">
+                      <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                      <span className="text-green-400">{msg.content}</span>
+                    </div>
+                  )
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -159,6 +159,47 @@
 }
 
 @layer components {
+  .code-editor {
+    @apply font-mono text-sm leading-relaxed;
+    tab-size: 4;
+    -moz-tab-size: 4;
+  }
+  
+  .code-editor:focus {
+    @apply outline-none;
+  }
+  
+  .line-numbers {
+    @apply select-none pointer-events-none text-xs;
+    line-height: 1.375rem;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+  
+  .scrollbar-thumb-primary {
+    scrollbar-color: var(--color-primary-200) transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: var(--color-primary-200);
+    border-radius: 3px;
+    opacity: 0.3;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    opacity: 0.6;
+  }
+
   .btn-call {
     @apply inline-block px-7 py-3 font-bold text-sm leading-5 text-white transition-colors duration-150 bg-success-100 border border-transparent rounded-full shadow-sm focus:outline-none focus:shadow-2xl active:bg-success-200 hover:bg-success-200 min-w-28 cursor-pointer items-center justify-center overflow-visible;
 
