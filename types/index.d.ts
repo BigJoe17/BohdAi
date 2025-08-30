@@ -97,3 +97,29 @@ interface InterviewFormProps {
 interface TechIconProps {
   techStack: string[];
 }
+
+interface CallLog {
+  id: string;
+  userId: string;
+  vapiCallId: string;
+  assistantId?: string;
+  status: string;
+  startedAt: string;
+  endedAt?: string;
+  duration?: number;
+  cost?: number;
+  costBreakdown?: {
+    llm?: number;
+    stt?: number;
+    tts?: number;
+    vapi?: number;
+    total?: number;
+  };
+  messageCount?: number;
+  hasRecording?: boolean;
+  hasTranscript?: boolean;
+  summary?: string;
+  analysis?: any;
+  createdAt: any;
+  updatedAt: any;
+}

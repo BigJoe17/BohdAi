@@ -86,7 +86,7 @@ export const setSessionCookie = async (idToken: string) => {
 
 export const getCurrentUser = async () => {
   const cookieStore = await cookies();
-  console.log("cookieStore", cookieStore);
+  // console.log("cookieStore", cookieStore);
 
   const session = cookieStore.get("session");
 
