@@ -95,3 +95,41 @@ export async function GET(
     );
   }
 }
+
+// New endpoint for real-time emotion processing during calls
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ callId: string }> }
+) {
+  try {
+    const { callId } = await params;
+    const { transcript, timestamp, isPartial } = await request.json();
+
+    if (!callId || !transcript) {
+      return NextResponse.json(
+        { error: 'Call ID and transcript are required' },
+        { status: 400 }
+      );
+    }
+
+    // Process real-time emotion detection
+    const emotionData = await emotionDetectionService.processStreamingMessage(
+      transcript,
+      timestamp || Date.now(),
+      isPartial
+    );
+
+    return NextResponse.json({
+      success: true,
+      emotionData,
+      timestamp: Date.now()
+    }, { status: 200 });
+
+  } catch (error) {
+    console.error('Error processing real-time emotion:', error);
+    return NextResponse.json(
+      { error: 'Failed to process emotion data' },
+      { status: 500 }
+    );
+  }
+}

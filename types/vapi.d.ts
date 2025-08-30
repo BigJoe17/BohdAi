@@ -1,3 +1,5 @@
+import { EmotionData } from '@/services/emotion/emotion-detection.service';
+
 enum MessageTypeEnum {
   TRANSCRIPT = "transcript",
   FUNCTION_CALL = "function-call",
@@ -18,6 +20,8 @@ enum TranscriptMessageTypeEnum {
 
 interface BaseMessage {
   type: MessageTypeEnum;
+  timestamp?: number;
+  emotionData?: EmotionData;
 }
 
 interface TranscriptMessage extends BaseMessage {
@@ -25,6 +29,7 @@ interface TranscriptMessage extends BaseMessage {
   role: MessageRoleEnum;
   transcriptType: TranscriptMessageTypeEnum;
   transcript: string;
+  emotionData?: EmotionData;
 }
 
 interface FunctionCallMessage extends BaseMessage {
@@ -42,6 +47,19 @@ interface FunctionCallResultMessage extends BaseMessage {
     result: unknown;
     [a: string]: unknown;
   };
+}
+
+// Enhanced message type with emotion data
+interface EnhancedMessage {
+  role: 'user' | 'assistant' | 'system';
+  message: string;
+  time?: number;
+  timestamp?: string;
+  duration?: number;
+  source?: string;
+  endTime?: number;
+  secondsFromStart?: number;
+  emotionData?: EmotionData;
 }
 
 type Message =

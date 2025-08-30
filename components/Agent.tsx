@@ -8,7 +8,10 @@ import { useRouter } from "next/navigation";
 import { vapi } from "@/services/vapi/vapi.sdk";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, MessageSquare, Code } from "lucide-react";
+import { Send, MessageSquare, Code, Activity } from "lucide-react";
+import { emotionDetectionService, EmotionData, EmotionLabel } from "@/services/emotion/emotion-detection.service";
+import { Message } from "@/types/vapi";
+import { useEmotionDetection } from "@/hooks/useEmotionDetection";
 
 enum CallStatus {
   ACTIVE = "ACTIVE",
@@ -18,14 +21,17 @@ enum CallStatus {
 }
 
 interface SavedMessage {
-  role: "user" | "system" | "assistant";
+  role: "user" | "assistant";
   content: string;
+  timestamp?: number;
+  emotionData?: EmotionData;
 }
 
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  emotionData?: EmotionData;
 }
 
 interface DSAQuestion {
@@ -51,6 +57,20 @@ function Agent({ userName, userId, type }: AgentProps) {
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
   const [fullAssistantMessage, setFullAssistantMessage] = useState<string>("");
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Use emotion detection hook
+  const {
+    currentEmotion,
+    emotionHistory,
+    addEmotionReading,
+    clearEmotions,
+    isProcessing: isProcessingEmotion
+  } = useEmotionDetection({
+    callId: currentCallId || undefined,
+    enableRealTime: true
+  });
+
+  const [showEmotionOverlay, setShowEmotionOverlay] = useState(true);
 
   const parseQuestionFromMessage = (message: string): DSAQuestion | null => {
     try {
@@ -281,11 +301,24 @@ function Agent({ userName, userId, type }: AgentProps) {
       setFullAssistantMessage("");
     };
 
-    const onMessage = (message: Message) => {
+    const onMessage = async (message: Message) => {
       if (message.type === "transcript" && message.transcriptType === "final") {
-        const newMessage = {
-          role: message.role,
+        const timestamp = Date.now();
+
+        // Process emotion detection for user messages using the hook
+        if (message.role === "user" && message.transcript.trim().length > 10) {
+          try {
+            await addEmotionReading(message.transcript, timestamp);
+          } catch (error) {
+            console.error("Error processing emotion:", error);
+          }
+        }
+
+        const newMessage: SavedMessage = {
+          role: message.role as "user" | "assistant",
           content: message.transcript,
+          timestamp,
+          emotionData: currentEmotion || undefined,
         };
 
         setMessages((prev) => [...prev, newMessage]);
@@ -441,6 +474,73 @@ function Agent({ userName, userId, type }: AgentProps) {
                 {latestMsg}
               </p>
             </div>
+          </div>
+        )}
+
+        {/* Real-time Emotion Overlay */}
+        {currentEmotion && showEmotionOverlay && callStatus === CallStatus.ACTIVE && (
+          <div className="w-full max-w-2xl mb-4 px-8">
+            <div className="bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-xl p-4 border border-purple-400/30 backdrop-blur-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{emotionDetectionService.getEmotionEmoji(currentEmotion.emotion)}</span>
+                  <div>
+                    <p className="text-sm font-medium text-white capitalize">
+                      {currentEmotion.emotion}
+                    </p>
+                    <p className="text-xs text-gray-300">
+                      Confidence: {Math.round(currentEmotion.confidence * 100)}%
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-purple-400" />
+                  <span 
+                    className={cn(
+                      "px-2 py-1 rounded-full text-xs font-medium",
+                      currentEmotion.intensity === 'high' && "bg-red-500/20 text-red-300",
+                      currentEmotion.intensity === 'medium' && "bg-yellow-500/20 text-yellow-300",
+                      currentEmotion.intensity === 'low' && "bg-green-500/20 text-green-300"
+                    )}
+                  >
+                    {currentEmotion.intensity}
+                  </span>
+                  <button
+                    onClick={() => setShowEmotionOverlay(false)}
+                    className="ml-2 text-gray-400 hover:text-white transition-colors"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+              
+              {/* Emotion metrics bar */}
+              <div className="mt-3 space-y-2">
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-300">Stress Level</span>
+                  <span className="text-gray-300">{Math.round((currentEmotion.additionalMetrics?.stress_level || 0) * 100)}%</span>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-1">
+                  <div 
+                    className="bg-gradient-to-r from-green-400 to-red-400 h-1 rounded-full transition-all duration-500"
+                    style={{ width: `${(currentEmotion.additionalMetrics?.stress_level || 0) * 100}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Emotion History Toggle */}
+        {emotionHistory.length > 0 && (
+          <div className="w-full max-w-2xl mb-4 px-8">
+            <button
+              onClick={() => setShowEmotionOverlay(!showEmotionOverlay)}
+              className="text-sm text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-2"
+            >
+              <Activity className="w-4 h-4" />
+              {showEmotionOverlay ? 'Hide' : 'Show'} Emotion Detection ({emotionHistory.length} readings)
+            </button>
           </div>
         )}
 
