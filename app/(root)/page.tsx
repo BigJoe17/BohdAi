@@ -9,41 +9,13 @@ import { Mic } from "lucide-react";
 import LogoutButton from "@/components/LogoutButton";
 import GetStartedButton from "@/components/GetStartedButton";
 import RecentCallData from "@/components/RecentCallData";
+import Footer from "@/components/Footer";
+import Navbar from "@/components/Navbar";
+import PageLayout from "@/components/PageLayout";
 
 const HomePage = () => {
   return (
-    <>
-      {/* Page Container - ensures all content aligns with navbar width */}
-      <div className="relative mx-auto" style={{ maxWidth: "1200px", width: "85vw" }}>
-        {/* Hero Navigation */}
-        <nav className="hero-nav">
-          <div className="hero-nav-content">
-            <Link href="/" className="hero-logo">
-              <Image 
-                src="/new-logo.png" 
-                alt="Hatchways Logo" 
-                width={80} 
-                height={80} 
-                className="rounded-md object-contain p-0.5"
-                style={{ background: 'transparent' }}
-                priority
-              />
-              <span className="logo-text">Hatchways</span>
-            </Link>
-            
-            <div className="hero-nav-links">
-              <Link href="/interview" className="nav-link">Practice</Link>
-              <Link href="/dsa-interview" className="nav-link">DSA Practice</Link>
-              <Link href="/call-data" className="nav-link">Interviews</Link>
-              <LogoutButton />
-            </div>
-          </div>
-        </nav>
-      </div>
-      
-      {/* Full page background overlay for consistent color */}
-      <div className="fixed inset-0 w-full h-full bg-black z-[-1]"></div>
-
+    <PageLayout fullWidth={true}>
       <section className="hero-section">
         {/* Aurora Background - with more subtle waves, extended to top */}
         <div className="absolute inset-0 w-full h-full z-0 overflow-hidden">
@@ -62,7 +34,10 @@ const HomePage = () => {
         {/* Hero content aligned with navbar width */}
         <div className="hero-content mx-auto" style={{ maxWidth: "1200px", width: "85vw" }}>
           <h1 className="hero-title">
-            Open the Door to Top Tech Roles.
+            Better Ways to Prepare
+          </h1>
+          <h1 className="hero-title">
+            Smarter Ways to Get Hired
           </h1>
           
           <p className="hero-subtitle">
@@ -154,7 +129,7 @@ const HomePage = () => {
           </section>
         </div>
       </div>
-    </>
+    </PageLayout>
   );
 };
 

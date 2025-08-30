@@ -1,26 +1,20 @@
-import Image from "next/image";
-import Link from "next/link";
-import { ReactNode } from "react";
-import { redirect } from "next/navigation";
-import { isAuthenticated } from "@/lib/actions/auth.actions";
+import type { Metadata } from 'next';
+import Footer from '@/components/Footer';
 
-async function AppLayout({ children }: { children: ReactNode }) {
-  const isAuth = await isAuthenticated();
-  if (!isAuth) {
-    redirect("/sign-in");
-  }
+export const metadata: Metadata = {
+  title: {
+    default: 'Hatchways',
+    template: '%s | Hatchways',
+  },
+  description: 'Hatchways - Your Personal AI Powered Mock Interviewer',
+};
 
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="root-layout">
-      <nav className="">
-        <Link href={"/"} className="flex items-center gap-2">
-          <Image src={"/logo.svg"} alt="logo" height={28} width={38} />
-          <h2 className="text-primary-100">PerpMe</h2>
-        </Link>
-      </nav>
+    <>
       {children}
-    </div>
+      {/* Footer is automatically included on all pages except the homepage */}
+      {/* The homepage has its own footer with the special styling */}
+    </>
   );
 }
-
-export default AppLayout;

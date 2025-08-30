@@ -7,6 +7,7 @@ import { ArrowLeft, Send, Code, Clock } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useStreamingChat } from "@/hooks/useStreamingChat";
+import PageLayout from "@/components/PageLayout";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -189,7 +190,8 @@ export default function DSAInterviewPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <PageLayout>
+    <div className="min-h-screen bg-gray-50 flex flex-col pt-24">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center justify-between max-w-6xl mx-auto">
@@ -388,5 +390,6 @@ export default function DSAInterviewPage() {
         )}
       </div>
     </div>
+    </PageLayout>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import PageLayout from "@/components/PageLayout";
 
 interface CallData {
   id: string;
@@ -50,38 +51,43 @@ function CallDataPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen p-6">
-        <h1 className="text-white text-3xl font-bold mb-8">Your Interviews</h1>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-gray-400 text-lg">Loading interview data...</div>
+      <PageLayout>
+        <div className="min-h-screen p-6 pt-32">
+          <h1 className="text-white text-3xl font-bold mb-8">Your Interviews</h1>
+          <div className="flex items-center justify-center h-64">
+            <div className="text-gray-400 text-lg">Loading interview data...</div>
+          </div>
         </div>
-      </div>
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen p-6">
-        <h1 className="text-white text-3xl font-bold mb-8">Your Interviews</h1>
-        <div className="bg-red-900/20 border border-red-500 rounded-lg p-6">
-          <h2 className="text-red-400 font-semibold mb-2">Error Loading Interviews</h2>
-          <p className="text-red-300">{error}</p>
-          <button 
-            onClick={() => window.location.reload()} 
-            className="mt-4 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors"
-          >
-            Retry
-          </button>
+      <PageLayout>
+        <div className="min-h-screen p-6 pt-32">
+          <h1 className="text-white text-3xl font-bold mb-8">Your Interviews</h1>
+          <div className="bg-red-900/20 border border-red-500 rounded-lg p-6">
+            <h2 className="text-red-400 font-semibold mb-2">Error Loading Interviews</h2>
+            <p className="text-red-300">{error}</p>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="mt-4 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
         </div>
-      </div>
+      </PageLayout>
     );
   }
 
   return (
-    <div className="min-h-screen p-6">
-      <h1 className="text-white text-3xl font-bold mb-8">Your Interviews</h1>
-      
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+    <PageLayout>
+      <div className="min-h-screen p-6 pt-32">
+        <h1 className="text-white text-3xl font-bold mb-8">Your Interviews</h1>
+        
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {callData.map((call, index, array) => {
           // Calculate interview number from the end (most recent gets highest number)
           const totalInterviews = array.length;
@@ -139,7 +145,8 @@ function CallDataPage() {
           <p className="text-gray-400 text-lg">No interviews available</p>
         </div>
       )}
-    </div>
+      </div>
+    </PageLayout>
   );
 }
 
