@@ -449,7 +449,7 @@ function Agent({ userName, userId, type }: AgentProps) {
                 )}
               </div>
             </div>
-            <h3 className="text-xl font-semibold text-white">PrepMe AI</h3>
+            <h3 className="text-xl font-semibold text-white">Hatchways AI</h3>
           </div>
 
           <div className="flex flex-col items-center gap-4">

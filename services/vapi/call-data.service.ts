@@ -1,4 +1,4 @@
-import Vapi from "@vapi-ai/web";
+ import Vapi from "@vapi-ai/web";
 
 interface VapiCall {
   id: string;
