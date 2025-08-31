@@ -7,6 +7,10 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "20");
 
     console.log(`Fetching ${limit} recent calls...`);
+    
+    // Check if API key is available
+    const hasApiKey = process.env.VAPI_PRIVATE_API_KEY ? "Yes" : "No";
+    console.log(`VAPI_PRIVATE_API_KEY available: ${hasApiKey}`);
 
     const calls = await vapiCallDataService.getRecentCalls(limit);
     
@@ -29,11 +33,19 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Error in call-data API:", error);
     
+    // More detailed error logging
+    if (error instanceof Error) {
+      console.error("Error name:", error.name);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+    }
+    
     const errorMessage = error instanceof Error ? error.message : "Failed to fetch call data";
     
     return NextResponse.json({
       error: errorMessage,
-      message: "Failed to fetch call data"
+      message: "Failed to fetch call data",
+      timestamp: new Date().toISOString()
     }, { status: 500 });
   }
 }

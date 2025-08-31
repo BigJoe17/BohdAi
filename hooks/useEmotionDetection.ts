@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { EmotionData, EmotionAnalysisResult, emotionDetectionService } from '@/services/emotion/emotion-detection.service';
 
 interface UseEmotionDetectionProps {
   callId?: string;
   enableRealTime?: boolean;
+  debounceMs?: number; // Add debounce option
 }
 
 interface UseEmotionDetectionReturn {
@@ -20,7 +21,8 @@ interface UseEmotionDetectionReturn {
 
 export function useEmotionDetection({
   callId,
-  enableRealTime = true
+  enableRealTime = true,
+  debounceMs = 2000 // Reduced to 2 seconds for Gemini 2.5 Flash's better rate limits
 }: UseEmotionDetectionProps = {}): UseEmotionDetectionReturn {
   const [currentEmotion, setCurrentEmotion] = useState<EmotionData | null>(null);
   const [emotionHistory, setEmotionHistory] = useState<EmotionData[]>([]);
@@ -28,52 +30,72 @@ export function useEmotionDetection({
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [realTimeEnabled, setRealTimeEnabled] = useState(enableRealTime);
+  
+  // Debounce references
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastProcessedTextRef = useRef<string>('');
 
-  // Add a new emotion reading
+  // Add a new emotion reading with debouncing
   const addEmotionReading = useCallback(async (text: string, timestamp?: number) => {
     if (!realTimeEnabled || text.trim().length < 10) return;
     
-    setIsProcessing(true);
-    setError(null);
-    
-    try {
-      const emotionData = await emotionDetectionService.analyzeTextEmotion(
-        text,
-        timestamp || Date.now(),
-        2000 // Default speaking duration
-      );
-      
-      setCurrentEmotion(emotionData);
-      setEmotionHistory(prev => [...prev, emotionData]);
-      
-      // Send to backend if we have a call ID
-      if (callId) {
-        try {
-          await fetch(`/api/vapi/call-data/${callId}/emotion`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              transcript: text,
-              timestamp: timestamp || Date.now(),
-              isPartial: false
-            }),
-          });
-        } catch (apiError) {
-          console.warn('Failed to send emotion data to backend:', apiError);
-          // Don't throw - continue with local processing
-        }
-      }
-      
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to process emotion';
-      setError(errorMessage);
-      console.error('Error processing emotion:', err);
-    } finally {
-      setIsProcessing(false);
+    // Skip if text is very similar to the last processed text
+    const normalizedText = text.trim().toLowerCase();
+    if (normalizedText === lastProcessedTextRef.current) {
+      return;
     }
-  }, [callId, realTimeEnabled]);
+    
+    // Clear existing timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    
+    // Set new timer
+    debounceTimerRef.current = setTimeout(async () => {
+      lastProcessedTextRef.current = normalizedText;
+      
+      setIsProcessing(true);
+      setError(null);
+      
+      try {
+        const emotionData = await emotionDetectionService.analyzeTextEmotion(
+          text,
+          timestamp || Date.now(),
+          2000 // Default speaking duration
+        );
+        
+        setCurrentEmotion(emotionData);
+        setEmotionHistory(prev => [...prev, emotionData]);
+        
+        // Send to backend if we have a call ID
+        if (callId) {
+          try {
+            await fetch(`/api/vapi/call-data/${callId}/emotion`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                transcript: text,
+                timestamp: timestamp || Date.now(),
+                isPartial: false
+              }),
+            });
+          } catch (apiError) {
+            console.warn('Failed to send emotion data to backend:', apiError);
+            // Don't throw - continue with local processing
+          }
+        }
+        
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to process emotion';
+        setError(errorMessage);
+        console.error('Error processing emotion:', err);
+      } finally {
+        setIsProcessing(false);
+      }
+    }, debounceMs);
+  }, [callId, realTimeEnabled, debounceMs]);
 
   // Process a complete transcript for analysis
   const processCompleteTranscript = useCallback(async (messages: any[]) => {

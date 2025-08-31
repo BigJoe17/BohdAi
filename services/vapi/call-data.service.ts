@@ -35,6 +35,8 @@ class VapiCallDataService {
   private async makeRequest(endpoint: string, options: RequestInit = {}) {
     const url = `${this.baseUrl}${endpoint}`;
     
+    console.log(`Making request to: ${url}`);
+    
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -44,8 +46,12 @@ class VapiCallDataService {
       },
     });
 
+    console.log(`Response status: ${response.status} ${response.statusText}`);
+
     if (!response.ok) {
-      throw new Error(`Vapi API error: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      console.error(`Vapi API error response body: ${errorText}`);
+      throw new Error(`Vapi API error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     return response.json();
@@ -63,10 +69,19 @@ class VapiCallDataService {
 
   async getRecentCalls(limit: number = 10): Promise<VapiCall[]> {
     try {
+      console.log(`Fetching ${limit} recent calls from Vapi API...`);
       const data = await this.makeRequest(`/call?limit=${limit}`);
+      console.log(`Successfully fetched ${Array.isArray(data) ? data.length : 'non-array'} calls`);
       return Array.isArray(data) ? data : [];
     } catch (error) {
       console.error("Error fetching recent calls:", error);
+      if (error instanceof Error) {
+        console.error("Error details:", {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
+      }
       throw error;
     }
   }

@@ -51,64 +51,204 @@ interface AudioFeatures {
 class EmotionDetectionService {
   private genAI: GoogleGenerativeAI;
   private model: any;
+  private requestQueue: Array<() => Promise<any>> = [];
+  private isProcessingQueue = false;
+  private lastRequestTime = 0;
+  private requestCount = 0;
+  private readonly RATE_LIMIT_DELAY = 3000; // 3 seconds between requests (about 20 per minute) - Gemini 2.5 Flash has higher limits
+  private readonly MAX_RETRIES = 3;
+  private readonly emotionCache = new Map<string, EmotionData>();
 
   constructor() {
     const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY;
-    if (!apiKey) {
-      console.warn('Google AI API key not found. Emotion detection will use fallback analysis.');
+    const fallbackOnly = process.env.EMOTION_DETECTION_FALLBACK_ONLY === 'true';
+    
+    if (!apiKey || fallbackOnly) {
+      console.warn('Google AI API key not found or fallback mode enabled. Emotion detection will use fallback analysis.');
     }
     this.genAI = new GoogleGenerativeAI(apiKey || '');
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    this.model = this.genAI.getGenerativeModel({ 
+      model: 'gemini-2.5-flash',
+      generationConfig: {
+        temperature: 0.3, // Lower temperature for more consistent emotion analysis
+        topK: 40,
+        topP: 0.8,
+        maxOutputTokens: 1024,
+      }
+    });
   }
 
   /**
-   * Analyze text transcript for emotional content using Gemini AI
+   * Rate-limited request wrapper for Gemini API
+   */
+  private async makeRateLimitedRequest<T>(requestFn: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      this.requestQueue.push(async () => {
+        try {
+          const result = await requestFn();
+          resolve(result);
+        } catch (error) {
+          reject(error);
+        }
+      });
+      this.processQueue();
+    });
+  }
+
+  /**
+   * Process request queue with rate limiting
+   */
+  private async processQueue() {
+    if (this.isProcessingQueue || this.requestQueue.length === 0) {
+      return;
+    }
+
+    this.isProcessingQueue = true;
+
+    while (this.requestQueue.length > 0) {
+      const now = Date.now();
+      const timeSinceLastRequest = now - this.lastRequestTime;
+
+      // Wait if we need to respect rate limit
+      if (timeSinceLastRequest < this.RATE_LIMIT_DELAY) {
+        const waitTime = this.RATE_LIMIT_DELAY - timeSinceLastRequest;
+        console.log(`Rate limiting: waiting ${waitTime}ms before next request`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+
+      const request = this.requestQueue.shift();
+      if (request) {
+        try {
+          await request();
+          this.lastRequestTime = Date.now();
+          this.requestCount++;
+        } catch (error) {
+          console.error('Queue request failed:', error);
+        }
+      }
+    }
+
+    this.isProcessingQueue = false;
+  }
+
+  /**
+   * Retry logic with exponential backoff
+   */
+  private async retryWithBackoff<T>(
+    fn: () => Promise<T>,
+    maxRetries: number = this.MAX_RETRIES,
+    baseDelay: number = 2000
+  ): Promise<T> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error: any) {
+        if (attempt === maxRetries) {
+          throw error;
+        }
+
+        // Check if it's a rate limit error
+        if (error.message?.includes('429') || error.message?.includes('quota')) {
+          const delay = baseDelay * Math.pow(2, attempt - 1) + Math.random() * 1000;
+          console.log(`Rate limit hit, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        } else {
+          throw error; // Don't retry non-rate-limit errors
+        }
+      }
+    }
+    throw new Error('Max retries exceeded');
+  }
+
+  /**
+   * Analyze text transcript for emotional content using Gemini AI with rate limiting
    */
   async analyzeTextEmotion(
     text: string, 
     timestamp: number, 
     speakingDuration: number = 0
   ): Promise<EmotionData> {
-    try {
-      const prompt = `
-        Analyze the emotional tone and sentiment of this interview response:
-        
-        Text: "${text}"
-        
-        Please provide a JSON response with the following structure:
-        {
-          "emotion": "happy|neutral|nervous|confident|stressed|excited|disappointed|frustrated|calm|uncertain",
-          "confidence": 0.85,
-          "intensity": "low|medium|high",
-          "stress_level": 0.3,
-          "energy_level": 0.7,
-          "speaking_pace": "normal",
-          "voice_stability": 0.8,
-          "reasoning": "Brief explanation of the analysis"
-        }
-        
-        Consider:
-        - Word choice and language patterns
-        - Confidence indicators (certainty vs uncertainty)
-        - Stress markers (hesitation, repetition, filler words)
-        - Positive/negative sentiment
-        - Professional communication style
-        
-        Return only the JSON object.
-      `;
+    // Check if fallback mode is enabled
+    const fallbackOnly = process.env.EMOTION_DETECTION_FALLBACK_ONLY === 'true';
+    const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY;
+    
+    if (fallbackOnly || !apiKey) {
+      console.log('Using fallback emotion analysis (API disabled or unavailable)');
+      return this.fallbackTextAnalysis(text, timestamp, speakingDuration);
+    }
 
-      const result = await this.model.generateContent(prompt);
-      const response = result.response.text();
+    // Create cache key
+    const cacheKey = `${text.trim().toLowerCase()}_${speakingDuration}`;
+    
+    // Check cache first
+    if (this.emotionCache.has(cacheKey)) {
+      const cachedResult = this.emotionCache.get(cacheKey)!;
+      return {
+        ...cachedResult,
+        timestamp,
+        secondsFromStart: timestamp / 1000
+      };
+    }
+
+    // Skip very short texts to reduce API calls
+    if (text.trim().length < 10) {
+      return this.fallbackTextAnalysis(text, timestamp, speakingDuration);
+    }
+
+    try {
+      const result = await this.makeRateLimitedRequest(async () => {
+        return await this.retryWithBackoff(async () => {
+          const prompt = `
+            You are an expert emotion analyst for job interviews. Analyze the emotional tone, confidence level, and stress indicators in this candidate's response.
+
+            Text: "${text}"
+
+            Provide your analysis as a JSON object with this exact structure:
+            {
+              "emotion": "happy|neutral|nervous|confident|stressed|excited|disappointed|frustrated|calm|uncertain",
+              "confidence": 0.85,
+              "intensity": "low|medium|high",
+              "stress_level": 0.3,
+              "energy_level": 0.7,
+              "speaking_pace": "slow|normal|fast",
+              "voice_stability": 0.8,
+              "reasoning": "Brief explanation of the analysis"
+            }
+
+            Analysis criteria:
+            - EMOTION: Primary emotional state based on word choice, tone, and content
+            - CONFIDENCE: 0.0-1.0 based on certainty of language and assertiveness
+            - INTENSITY: How strongly the emotion is expressed
+            - STRESS_LEVEL: 0.0-1.0 based on hesitation, filler words, uncertainty markers
+            - ENERGY_LEVEL: 0.0-1.0 based on enthusiasm and engagement
+            - SPEAKING_PACE: Inferred from text structure and verbosity
+            - VOICE_STABILITY: 0.0-1.0 based on consistency and composure
+            - REASONING: 1-2 sentence explanation of your assessment
+
+            Look for:
+            - Confidence markers: "definitely", "I'm certain", "I know", "absolutely"
+            - Nervous indicators: "um", "uh", "I think maybe", "not really sure"
+            - Stress patterns: repetition, incomplete thoughts, excessive qualifiers
+            - Professional tone: structured responses, technical vocabulary
+            - Enthusiasm: positive language, detailed examples, proactive statements
+
+            Respond only with the JSON object, no additional text.
+          `;
+
+          const result = await this.model.generateContent(prompt);
+          return result.response.text();
+        });
+      });
       
       // Extract JSON from response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonMatch = result.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         throw new Error('Invalid response format from Gemini');
       }
 
       const analysis = JSON.parse(jsonMatch[0]);
       
-      return {
+      const emotionData: EmotionData = {
         emotion: analysis.emotion as EmotionLabel,
         confidence: Math.min(Math.max(analysis.confidence || 0.5, 0), 1),
         timestamp,
@@ -123,10 +263,30 @@ class EmotionDetectionService {
         }
       };
 
-    } catch (error) {
+      // Cache the result (without timestamp for reusability)
+      const cacheableData: Partial<EmotionData> = {
+        emotion: emotionData.emotion,
+        confidence: emotionData.confidence,
+        duration: emotionData.duration,
+        intensity: emotionData.intensity,
+        additionalMetrics: emotionData.additionalMetrics
+      };
+      this.emotionCache.set(cacheKey, cacheableData as EmotionData);
+
+      // Limit cache size
+      if (this.emotionCache.size > 100) {
+        const firstKey = this.emotionCache.keys().next().value;
+        if (firstKey) {
+          this.emotionCache.delete(firstKey);
+        }
+      }
+
+      return emotionData;
+
+    } catch (error: any) {
       console.error('Error analyzing text emotion:', error);
       
-      // Fallback to rule-based emotion detection
+      // Always fallback to rule-based analysis on any error
       return this.fallbackTextAnalysis(text, timestamp, speakingDuration);
     }
   }
