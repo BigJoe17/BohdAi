@@ -1,13 +1,23 @@
 import Agent from "@/components/Agent";
 import PageLayout from "@/components/PageLayout";
+import { getCurrentUser } from "@/lib/actions/auth.actions";
+import { redirect } from "next/navigation";
 
-function InterviewPage() {
+async function InterviewPage() {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    redirect("/sign-in");
+  }
+
   return (
-    <PageLayout showFooter={false}>
-      <div className="fixed inset-0 z-50 pt-24">
-        <Agent userName={"you"} userId={"123"} type="generate" />
-      </div>
-    </PageLayout>
+    <>
+      <PageLayout showFooter={false}>
+        <div className="fixed inset-0 z-50">
+          <Agent userName={user.name} userId={user.id} type="generate" />
+        </div>
+      </PageLayout>
+    </>
   );
 }
 

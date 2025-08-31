@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
 import Image from "next/image";
@@ -9,7 +10,13 @@ import { vapi } from "@/services/vapi/vapi.sdk";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, MessageSquare, Code, Activity } from "lucide-react";
-import { emotionDetectionService, EmotionData, EmotionLabel } from "@/services/emotion/emotion-detection.service";
+import {
+  emotionDetectionService,
+  EmotionData,
+  EmotionLabel,
+} from "@/services/emotion/emotion-detection.service";
+import { useCallLogs } from "@/hooks/useCallLogs";
+import { toast } from "sonner";
 import { Message } from "@/types/vapi";
 import { useEmotionDetection } from "@/hooks/useEmotionDetection";
 
@@ -52,10 +59,13 @@ function Agent({ userName, userId, type }: AgentProps) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [currentInput, setCurrentInput] = useState("");
   const [showChat, setShowChat] = useState(false);
-  const [currentQuestion, setCurrentQuestion] = useState<DSAQuestion | null>(null);
+  const [currentQuestion, setCurrentQuestion] = useState<DSAQuestion | null>(
+    null
+  );
   const [isLoadingChat, setIsLoadingChat] = useState(false);
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
   const [fullAssistantMessage, setFullAssistantMessage] = useState<string>("");
+  const [isSavingCall, setIsSavingCall] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Use emotion detection hook
@@ -64,41 +74,46 @@ function Agent({ userName, userId, type }: AgentProps) {
     emotionHistory,
     addEmotionReading,
     clearEmotions,
-    isProcessing: isProcessingEmotion
+    isProcessing: isProcessingEmotion,
   } = useEmotionDetection({
     callId: currentCallId || undefined,
-    enableRealTime: true
+    enableRealTime: true,
   });
 
   const [showEmotionOverlay, setShowEmotionOverlay] = useState(true);
+  // Add call logs hook
+  const { saveCallLog } = useCallLogs(userId);
 
   const parseQuestionFromMessage = (message: string): DSAQuestion | null => {
     try {
-      const lines = message.split('\n');
+      const lines = message.split("\n");
       let title = "";
       let difficulty: "Easy" | "Medium" | "Hard" = "Medium";
       let problem = "";
       let constraints: string[] = [];
 
       let currentSection = "";
-      
+
       // Look for question patterns in the full message
       const questionPatterns = [
         /(?:problem|question|challenge|task):\s*(.+?)(?:\n|$)/i,
         /(?:write|implement|create|solve)\s+(?:a|an)?\s*(.+?)(?:\n|\.)/i,
-        /(?:given|you have|consider)\s+(.+?)(?:\n|\.)/i
+        /(?:given|you have|consider)\s+(.+?)(?:\n|\.)/i,
       ];
 
       for (const pattern of questionPatterns) {
         const match = message.match(pattern);
         if (match && match[1]) {
-          title = match[1].trim().slice(0, 80) + (match[1].length > 80 ? "..." : "");
+          title =
+            match[1].trim().slice(0, 80) + (match[1].length > 80 ? "..." : "");
           break;
         }
       }
 
       // Extract difficulty if mentioned
-      const difficultyMatch = message.match(/(easy|medium|hard|beginner|intermediate|advanced)/i);
+      const difficultyMatch = message.match(
+        /(easy|medium|hard|beginner|intermediate|advanced)/i
+      );
       if (difficultyMatch) {
         const diff = difficultyMatch[1].toLowerCase();
         if (diff === "easy" || diff === "beginner") difficulty = "Easy";
@@ -117,8 +132,8 @@ function Agent({ userName, userId, type }: AgentProps) {
       if (constraintMatch) {
         constraints = constraintMatch[1]
           .split(/[•\-\n]/)
-          .map(c => c.trim())
-          .filter(c => c.length > 0)
+          .map((c) => c.trim())
+          .filter((c) => c.length > 0)
           .slice(0, 5);
       }
 
@@ -134,16 +149,26 @@ function Agent({ userName, userId, type }: AgentProps) {
 
       // Fallback: if it's a long message with coding keywords, treat as problem
       if (message.length > 50) {
-        const codingKeywords = ["array", "string", "tree", "graph", "algorithm", "function", "return", "implement"];
-        const hasKeywords = codingKeywords.some(keyword => 
+        const codingKeywords = [
+          "array",
+          "string",
+          "tree",
+          "graph",
+          "algorithm",
+          "function",
+          "return",
+          "implement",
+        ];
+        const hasKeywords = codingKeywords.some((keyword) =>
           message.toLowerCase().includes(keyword)
         );
-        
+
         if (hasKeywords) {
           return {
             title: "Programming Problem",
             difficulty: "Medium",
-            problem: message.slice(0, 400) + (message.length > 400 ? "..." : ""),
+            problem:
+              message.slice(0, 400) + (message.length > 400 ? "..." : ""),
           };
         }
       }
@@ -165,7 +190,7 @@ function Agent({ userName, userId, type }: AgentProps) {
       timestamp: new Date(),
     };
 
-    setChatMessages(prev => [...prev, userMessage]);
+    setChatMessages((prev) => [...prev, userMessage]);
     setCurrentInput("");
 
     try {
@@ -173,44 +198,50 @@ function Agent({ userName, userId, type }: AgentProps) {
       if (callStatus === CallStatus.ACTIVE) {
         // Add the solution to the conversation context that the assistant can see
         const solutionPrompt = `USER PROVIDED DSA SOLUTION VIA TEXT: "${message}". Please acknowledge this solution and provide feedback during the interview.`;
-        
+
         try {
           // Try to send via Vapi's message system
           vapi.send({
-            type: "add-message", 
+            type: "add-message",
             message: {
               role: "user",
-              content: solutionPrompt
-            }
+              content: solutionPrompt,
+            },
           });
         } catch (vapiError) {
-          console.log("Direct Vapi send failed, solution logged locally:", vapiError);
+          console.log(
+            "Direct Vapi send failed, solution logged locally:",
+            vapiError
+          );
         }
-        
+
         // Add success message to chat
         const successMessage: ChatMessage = {
-          role: "assistant", 
-          content: "✅ Solution submitted! The interviewer will analyze your approach.",
+          role: "assistant",
+          content:
+            "✅ Solution submitted! The interviewer will analyze your approach.",
           timestamp: new Date(),
         };
-        setChatMessages(prev => [...prev, successMessage]);
+        setChatMessages((prev) => [...prev, successMessage]);
 
         // Store the solution in the component state for potential later use
-        setMessages(prev => [...prev, {
-          role: "user",
-          content: `[TEXT SOLUTION]: ${message}`
-        }]);
-
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "user",
+            content: `[TEXT SOLUTION]: ${message}`,
+          },
+        ]);
       } else {
         // When call is not active, just acknowledge
         const offlineMessage: ChatMessage = {
           role: "assistant",
-          content: "✅ Solution noted. Start a voice interview to get real-time feedback.",
+          content:
+            "✅ Solution noted. Start a voice interview to get real-time feedback.",
           timestamp: new Date(),
         };
-        setChatMessages(prev => [...prev, offlineMessage]);
+        setChatMessages((prev) => [...prev, offlineMessage]);
       }
-
     } catch (error) {
       console.error("Error processing solution:", error);
       const errorMessage: ChatMessage = {
@@ -218,7 +249,7 @@ function Agent({ userName, userId, type }: AgentProps) {
         content: "✅ Solution recorded successfully.",
         timestamp: new Date(),
       };
-      setChatMessages(prev => [...prev, errorMessage]);
+      setChatMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoadingChat(false);
     }
@@ -226,9 +257,12 @@ function Agent({ userName, userId, type }: AgentProps) {
 
   const getDifficultyColor = (difficulty: "Easy" | "Medium" | "Hard") => {
     switch (difficulty) {
-      case "Easy": return "text-green-600 bg-green-100";
-      case "Medium": return "text-orange-600 bg-orange-100";
-      case "Hard": return "text-red-600 bg-red-100";
+      case "Easy":
+        return "text-green-600 bg-green-100";
+      case "Medium":
+        return "text-orange-600 bg-orange-100";
+      case "Hard":
+        return "text-red-600 bg-red-100";
     }
   };
 
@@ -243,34 +277,34 @@ function Agent({ userName, userId, type }: AgentProps) {
   // Global error handler to suppress Vapi meeting end errors
   useEffect(() => {
     const originalConsoleError = console.error;
-    
+
     const filteredConsoleError = (...args: any[]) => {
-      const message = args.join(' ');
-      
+      const message = args.join(" ");
+
       // Filter out Vapi meeting end errors
       if (
-        message.includes('Meeting ended due to ejection') ||
-        message.includes('Meeting has ended') ||
-        message.includes('call-end') ||
-        message.includes('ejection')
+        message.includes("Meeting ended due to ejection") ||
+        message.includes("Meeting has ended") ||
+        message.includes("call-end") ||
+        message.includes("ejection")
       ) {
         // Don't log these errors as they're expected behavior
         return;
       }
-      
+
       // Log all other errors normally
       originalConsoleError.apply(console, args);
     };
 
     // Handle unhandled promise rejections from Vapi
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      const message = event.reason?.message || event.reason || '';
-      
+      const message = event.reason?.message || event.reason || "";
+
       if (
-        message.includes('Meeting ended due to ejection') ||
-        message.includes('Meeting has ended') ||
-        message.includes('call-end') ||
-        message.includes('ejection')
+        message.includes("Meeting ended due to ejection") ||
+        message.includes("Meeting has ended") ||
+        message.includes("call-end") ||
+        message.includes("ejection")
       ) {
         // Prevent the error from being logged
         event.preventDefault();
@@ -279,26 +313,74 @@ function Agent({ userName, userId, type }: AgentProps) {
     };
 
     console.error = filteredConsoleError;
-    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
 
     return () => {
       // Restore original console.error when component unmounts
       console.error = originalConsoleError;
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+      window.removeEventListener(
+        "unhandledrejection",
+        handleUnhandledRejection
+      );
     };
   }, []);
 
   useEffect(() => {
     const onCallStart = () => {
       setCallStatus(CallStatus.ACTIVE);
+      console.log("Call started - will try to get call ID from Vapi");
     };
 
-    const onCallEnd = () => {
+    const onCallEnd = async () => {
       setCallStatus(CallStatus.FINISHED);
-      setCurrentCallId(null);
       setShowChat(false);
       setChatMessages([]);
       setFullAssistantMessage("");
+
+      // Use the stored call ID from when the call started
+      let callId = currentCallId;
+
+      // If no stored call ID, try to get it from Vapi's internal state
+      if (!callId) {
+        try {
+          // Try to access the call ID from Vapi's internal state
+          const vapiCall = (vapi as any)?._call;
+          callId = vapiCall?.id || vapiCall?.callId;
+          console.log("Retrieved call ID from Vapi internal state:", callId);
+        } catch (error) {
+          console.warn("Could not retrieve call ID from Vapi state:", error);
+        }
+      }
+
+      if (!callId) {
+        console.log("NO CALL ID AVAILABLE - currentCallId is:", currentCallId);
+        toast.error("No call ID available for saving");
+        setCurrentCallId(null);
+        return;
+      }
+
+      // Save call log when call ends
+      if (callId && userId) {
+        setIsSavingCall(true);
+        toast.info("Saving call data...", { duration: 2000 });
+
+        try {
+          // Add delay to ensure Vapi has processed the call data
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+
+          const res = await saveCallLog(callId);
+          console.log(`Call log saved for call: ${callId}`);
+          toast.success("Call data saved successfully!");
+        } catch (error) {
+          console.error("Error saving call log:", error);
+          toast.error("Failed to save call data. Please try again.");
+        } finally {
+          setIsSavingCall(false);
+          setCurrentCallId(null); // Clear the call ID after processing
+        }
+      } else {
+        setCurrentCallId(null); // Clear even if not saving
+      }
     };
 
     const onMessage = async (message: Message) => {
@@ -325,15 +407,37 @@ function Agent({ userName, userId, type }: AgentProps) {
 
         // Build full assistant message by concatenating messages
         if (message.role === "assistant") {
-          setFullAssistantMessage(prev => {
+          setFullAssistantMessage((prev) => {
             const updated = prev + " " + message.transcript;
-            
+
             // Check if the combined message contains DSA-related keywords
-            const dsaKeywords = ["dsa", "algorithm", "data structure", "coding", "problem", "solve", "function", "array", "string", "tree", "graph", "linked list", "stack", "queue", "write a", "implement", "return", "leetcode", "write code", "solution", "complexity"];
-            const containsDSA = dsaKeywords.some(keyword => 
+            const dsaKeywords = [
+              "dsa",
+              "algorithm",
+              "data structure",
+              "coding",
+              "problem",
+              "solve",
+              "function",
+              "array",
+              "string",
+              "tree",
+              "graph",
+              "linked list",
+              "stack",
+              "queue",
+              "write a",
+              "implement",
+              "return",
+              "leetcode",
+              "write code",
+              "solution",
+              "complexity",
+            ];
+            const containsDSA = dsaKeywords.some((keyword) =>
               updated.toLowerCase().includes(keyword)
             );
-            
+
             if (containsDSA) {
               setShowChat(true);
               // Try to parse question from the full message
@@ -342,7 +446,7 @@ function Agent({ userName, userId, type }: AgentProps) {
                 setCurrentQuestion(questionData);
               }
             }
-            
+
             return updated;
           });
         } else {
@@ -381,29 +485,61 @@ function Agent({ userName, userId, type }: AgentProps) {
       vapi.off("speech-end", onSpeechEnd);
       vapi.off("error", onErr);
     };
-  }, []);
+  }, [saveCallLog, userId, router, currentCallId]);
 
   useEffect(() => {
-    if (callStatus === CallStatus.FINISHED) {
+    if (callStatus === CallStatus.FINISHED && !isSavingCall) {
       // Add a small delay before redirecting to allow cleanup
       const timer = setTimeout(() => {
         router.push("/");
-      }, 1000);
-      
+      }, 2000);
+
       return () => clearTimeout(timer);
     }
-  }, [callStatus, router]);
+  }, [callStatus, isSavingCall, router]);
 
   const handleCall = async () => {
     setCallStatus(CallStatus.CONNECTING);
 
-    await vapi.start(ASSISTANT, {
-      variableValues: {
-        username: userName,
-        userId: userId,
-        dsaChatEnabled: "true",
-      },
-    });
+    try {
+      const callData = await vapi.start(ASSISTANT, {
+        variableValues: {
+          username: userName,
+          userId: userId,
+          dsaChatEnabled: "true",
+        },
+      });
+
+      // Try to extract call ID from the response
+      const callId = callData?.id || callData?.call?.id;
+      if (callId) {
+        setCurrentCallId(callId);
+        console.log("Call started with ID captured:", callId);
+      } else {
+        console.warn("No call ID in start response:", callData);
+        // Set a timeout to try to get the call ID after the call is established
+        setTimeout(() => {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const vapiCall = (vapi as any)?._call;
+            const fallbackCallId = vapiCall?.id || vapiCall?.callId;
+            if (fallbackCallId && !currentCallId) {
+              setCurrentCallId(fallbackCallId);
+              console.log(
+                "Call ID captured via fallback method:",
+                fallbackCallId
+              );
+            }
+          } catch (error) {
+            console.warn("Failed to capture call ID via fallback:", error);
+          }
+        }, 1000);
+      }
+    } catch (error) {
+      console.error("Failed to start call:", error);
+      setCallStatus(CallStatus.INACTIVE);
+      toast.error("Failed to start call. Please try again.");
+    }
   };
 
   const handleDisconnect = async () => {
@@ -412,12 +548,12 @@ function Agent({ userName, userId, type }: AgentProps) {
       setShowChat(false);
       setChatMessages([]);
       setFullAssistantMessage("");
-      
+
       // Gracefully stop the call
       await vapi.stop();
     } catch (error) {
       // Suppress expected disconnection errors
-      if (error instanceof Error && !error.message.includes('Meeting ended')) {
+      if (error instanceof Error && !error.message.includes("Meeting ended")) {
         console.log("Disconnect error:", error.message);
       }
     }
@@ -478,58 +614,79 @@ function Agent({ userName, userId, type }: AgentProps) {
         )}
 
         {/* Real-time Emotion Overlay */}
-        {currentEmotion && showEmotionOverlay && callStatus === CallStatus.ACTIVE && (
-          <div className="w-full max-w-2xl mb-4 px-8">
-            <div className="bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-xl p-4 border border-purple-400/30 backdrop-blur-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full" style={{backgroundColor: emotionDetectionService.getEmotionColor(currentEmotion.emotion)}}></div>
-                  <div>
-                    <p className="text-sm font-medium text-white capitalize">
-                      {currentEmotion.emotion}
-                    </p>
-                    <p className="text-xs text-gray-300">
-                      Confidence: {Math.round(currentEmotion.confidence * 100)}%
-                    </p>
+        {currentEmotion &&
+          showEmotionOverlay &&
+          callStatus === CallStatus.ACTIVE && (
+            <div className="w-full max-w-2xl mb-4 px-8">
+              <div className="bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-xl p-4 border border-purple-400/30 backdrop-blur-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">
+                      {emotionDetectionService.getEmotionEmoji(
+                        currentEmotion.emotion
+                      )}
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium text-white capitalize">
+                        {currentEmotion.emotion}
+                      </p>
+                      <p className="text-xs text-gray-300">
+                        Confidence:{" "}
+                        {Math.round(currentEmotion.confidence * 100)}%
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-purple-400" />
+                    <span
+                      className={cn(
+                        "px-2 py-1 rounded-full text-xs font-medium",
+                        currentEmotion.intensity === "high" &&
+                          "bg-red-500/20 text-red-300",
+                        currentEmotion.intensity === "medium" &&
+                          "bg-yellow-500/20 text-yellow-300",
+                        currentEmotion.intensity === "low" &&
+                          "bg-green-500/20 text-green-300"
+                      )}
+                    >
+                      {currentEmotion.intensity}
+                    </span>
+                    <button
+                      onClick={() => setShowEmotionOverlay(false)}
+                      className="ml-2 text-gray-400 hover:text-white transition-colors"
+                    >
+                      ×
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-purple-400" />
-                  <span 
-                    className={cn(
-                      "px-2 py-1 rounded-full text-xs font-medium",
-                      currentEmotion.intensity === 'high' && "bg-red-500/20 text-red-300",
-                      currentEmotion.intensity === 'medium' && "bg-yellow-500/20 text-yellow-300",
-                      currentEmotion.intensity === 'low' && "bg-green-500/20 text-green-300"
-                    )}
-                  >
-                    {currentEmotion.intensity}
-                  </span>
-                  <button
-                    onClick={() => setShowEmotionOverlay(false)}
-                    className="ml-2 text-gray-400 hover:text-white transition-colors"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-              
-              {/* Emotion metrics bar */}
-              <div className="mt-3 space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-300">Stress Level</span>
-                  <span className="text-gray-300">{Math.round((currentEmotion.additionalMetrics?.stress_level || 0) * 100)}%</span>
-                </div>
-                <div className="w-full bg-gray-700 rounded-full h-1">
-                  <div 
-                    className="bg-gradient-to-r from-green-400 to-red-400 h-1 rounded-full transition-all duration-500"
-                    style={{ width: `${(currentEmotion.additionalMetrics?.stress_level || 0) * 100}%` }}
-                  ></div>
+
+                {/* Emotion metrics bar */}
+                <div className="mt-3 space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-300">Stress Level</span>
+                    <span className="text-gray-300">
+                      {Math.round(
+                        (currentEmotion.additionalMetrics?.stress_level || 0) *
+                          100
+                      )}
+                      %
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-1">
+                    <div
+                      className="bg-gradient-to-r from-green-400 to-red-400 h-1 rounded-full transition-all duration-500"
+                      style={{
+                        width: `${
+                          (currentEmotion.additionalMetrics?.stress_level ||
+                            0) * 100
+                        }%`,
+                      }}
+                    ></div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Emotion History Toggle */}
         {emotionHistory.length > 0 && (
@@ -539,24 +696,41 @@ function Agent({ userName, userId, type }: AgentProps) {
               className="text-sm text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-2"
             >
               <Activity className="w-4 h-4" />
-              {showEmotionOverlay ? 'Hide' : 'Show'} Emotion Detection ({emotionHistory.length} readings)
+              {showEmotionOverlay ? "Hide" : "Show"} Emotion Detection (
+              {emotionHistory.length} readings)
             </button>
           </div>
         )}
 
         {/* Control Buttons */}
-        <div className="flex justify-center items-center">
+        <div className="flex flex-col justify-center items-center gap-4">
           {callStatus !== CallStatus.ACTIVE ? (
-            <button className="bg-primary-200 hover:bg-primary-200/80 text-dark-100 px-8 py-4 rounded-full font-bold text-lg transition-colors relative" onClick={handleCall}>
+            <button
+              className="bg-primary-200 hover:bg-primary-200/80 text-dark-100 px-8 py-4 rounded-full font-bold text-lg transition-colors relative"
+              onClick={handleCall}
+            >
               {callStatus === CallStatus.CONNECTING && (
                 <span className="absolute inset-0 bg-primary-200 rounded-full animate-ping opacity-75"></span>
               )}
-              <span className="relative">{isInativeOrFinished ? "Start Interview" : "Connecting..."}</span>
+              <span className="relative">
+                {isInativeOrFinished ? "Start Interview" : "Connecting..."}
+              </span>
             </button>
           ) : (
-            <button className="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-full font-bold text-lg transition-colors" onClick={handleDisconnect}>
+            <button
+              className="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-full font-bold text-lg transition-colors"
+              onClick={handleDisconnect}
+            >
               End Interview
             </button>
+          )}
+
+          {/* Saving Indicator */}
+          {isSavingCall && (
+            <div className="flex items-center gap-2 text-primary-200 animate-pulse">
+              <div className="w-4 h-4 border-2 border-primary-200 border-t-transparent rounded-full animate-spin"></div>
+              <span className="text-sm font-medium">Saving call data...</span>
+            </div>
           )}
         </div>
       </div>
@@ -569,10 +743,12 @@ function Agent({ userName, userId, type }: AgentProps) {
             <div className="w-8 h-8 bg-primary-200 rounded-lg flex items-center justify-center">
               <span className="text-dark-100 text-sm font-bold">&lt;/&gt;</span>
             </div>
-            <span className="text-light-100 font-semibold text-lg">Code Editor</span>
+            <span className="text-light-100 font-semibold text-lg">
+              Code Editor
+            </span>
           </div>
         </div>
-        
+
         {/* Content Area */}
         <div className="flex-1 flex flex-col p-6">
           {/* Problem Statement */}
@@ -582,51 +758,76 @@ function Agent({ userName, userId, type }: AgentProps) {
                 <h4 className="text-primary-100 font-semibold text-lg">
                   {currentQuestion.title}
                 </h4>
-                <span className={cn(
-                  "px-3 py-1 rounded-full text-xs font-bold ml-3 flex-shrink-0",
-                  currentQuestion.difficulty === "Easy" && "bg-green-500/20 text-green-400 border border-green-500/30",
-                  currentQuestion.difficulty === "Medium" && "bg-orange-500/20 text-orange-400 border border-orange-500/30", 
-                  currentQuestion.difficulty === "Hard" && "bg-red-500/20 text-red-400 border border-red-500/30"
-                )}>
+                <span
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs font-bold ml-3 flex-shrink-0",
+                    currentQuestion.difficulty === "Easy" &&
+                      "bg-green-500/20 text-green-400 border border-green-500/30",
+                    currentQuestion.difficulty === "Medium" &&
+                      "bg-orange-500/20 text-orange-400 border border-orange-500/30",
+                    currentQuestion.difficulty === "Hard" &&
+                      "bg-red-500/20 text-red-400 border border-red-500/30"
+                  )}
+                >
                   {currentQuestion.difficulty}
                 </span>
               </div>
-              
+
               <div className="text-light-100 text-sm leading-relaxed mb-3 max-h-32 overflow-y-auto scrollbar-thin scrollbar-thumb-primary-200/30">
                 {currentQuestion.problem}
               </div>
-              
-              {currentQuestion.constraints && currentQuestion.constraints.length > 0 && (
-                <div className="pt-3 border-t border-primary-200/10">
-                  <p className="text-light-400 text-xs font-medium mb-2">Constraints:</p>
-                  <ul className="text-light-100 text-xs space-y-1">
-                    {currentQuestion.constraints.slice(0, 3).map((constraint, index) => (
-                      <li key={index} className="flex items-start gap-2">
-                        <span className="text-primary-200 mt-0.5 flex-shrink-0">•</span>
-                        <span className="leading-relaxed">{constraint}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+
+              {currentQuestion.constraints &&
+                currentQuestion.constraints.length > 0 && (
+                  <div className="pt-3 border-t border-primary-200/10">
+                    <p className="text-light-400 text-xs font-medium mb-2">
+                      Constraints:
+                    </p>
+                    <ul className="text-light-100 text-xs space-y-1">
+                      {currentQuestion.constraints
+                        .slice(0, 3)
+                        .map((constraint, index) => (
+                          <li key={index} className="flex items-start gap-2">
+                            <span className="text-primary-200 mt-0.5 flex-shrink-0">
+                              •
+                            </span>
+                            <span className="leading-relaxed">
+                              {constraint}
+                            </span>
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                )}
             </div>
           )}
 
           {/* Previous Solutions */}
           {chatMessages.length > 0 && (
             <div className="mb-4 p-4 bg-dark-300/30 rounded-xl border border-primary-200/10">
-              <p className="text-light-400 text-xs font-medium mb-2">Previous Solutions:</p>
+              <p className="text-light-400 text-xs font-medium mb-2">
+                Previous Solutions:
+              </p>
               <div className="max-h-24 overflow-y-auto scrollbar-thin scrollbar-thumb-primary-200/30 space-y-2">
-                {chatMessages.map((msg, index) => (
-                  msg.role === "user" && (
-                    <div key={index} className="text-light-100 text-xs bg-dark-200 rounded-lg p-2 border border-primary-200/10">
-                      <div className="font-mono text-xs">{msg.content.substring(0, 100)}...</div>
-                      <div className="text-light-400 text-xs mt-1">
-                        {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {chatMessages.map(
+                  (msg, index) =>
+                    msg.role === "user" && (
+                      <div
+                        key={index}
+                        className="text-light-100 text-xs bg-dark-200 rounded-lg p-2 border border-primary-200/10"
+                      >
+                        <div className="font-mono text-xs">
+                          {msg.content.substring(0, 100)}...
+                        </div>
+                        <div className="text-light-400 text-xs mt-1">
+                          {msg.timestamp.toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )
-                ))}
+                    )
+                )}
               </div>
             </div>
           )}
@@ -634,14 +835,16 @@ function Agent({ userName, userId, type }: AgentProps) {
           {/* Code Editor */}
           <div className="flex-1 flex flex-col">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-light-100 text-sm font-medium">Your Solution:</p>
+              <p className="text-light-100 text-sm font-medium">
+                Your Solution:
+              </p>
               <div className="flex items-center gap-2 text-xs text-light-400">
-                <span>Lines: {currentInput.split('\n').length}</span>
+                <span>Lines: {currentInput.split("\n").length}</span>
                 <span>•</span>
                 <span>Chars: {currentInput.length}</span>
               </div>
             </div>
-            
+
             <div className="flex-1 relative">
               <textarea
                 value={currentInput}
@@ -659,14 +862,22 @@ function solution() {
 }`}
                 disabled={isLoadingChat}
                 className="w-full h-full bg-dark-300 border border-primary-200/20 text-light-100 placeholder:text-light-400/70 rounded-xl p-4 pl-12 font-mono text-sm leading-relaxed resize-none focus:border-primary-200 focus:ring-2 focus:ring-primary-200/20 focus:outline-none"
-                style={{ minHeight: '400px' }}
+                style={{ minHeight: "400px" }}
               />
-              
+
               {/* Line numbers overlay */}
               <div className="absolute top-4 left-2 text-light-400/50 text-xs font-mono leading-relaxed pointer-events-none select-none">
-                {Array.from({ length: Math.max(20, currentInput.split('\n').length) }, (_, i) => (
-                  <div key={i} className="h-[1.375rem] text-right pr-2 min-w-[24px]">{i + 1}</div>
-                ))}
+                {Array.from(
+                  { length: Math.max(20, currentInput.split("\n").length) },
+                  (_, i) => (
+                    <div
+                      key={i}
+                      className="h-[1.375rem] text-right pr-2 min-w-[24px]"
+                    >
+                      {i + 1}
+                    </div>
+                  )
+                )}
               </div>
             </div>
 
@@ -674,7 +885,11 @@ function solution() {
             <div className="mt-4 flex items-center gap-3">
               <Button
                 onClick={() => sendChatMessage(currentInput)}
-                disabled={isLoadingChat || !currentInput.trim() || callStatus !== CallStatus.ACTIVE}
+                disabled={
+                  isLoadingChat ||
+                  !currentInput.trim() ||
+                  callStatus !== CallStatus.ACTIVE
+                }
                 className="bg-primary-200 hover:bg-primary-200/80 text-dark-100 rounded-xl px-6 py-3 font-bold flex items-center gap-2"
               >
                 {isLoadingChat ? (
@@ -689,23 +904,29 @@ function solution() {
                   </>
                 )}
               </Button>
-              
+
               <div className="text-xs text-light-400">
-                {callStatus === CallStatus.ACTIVE ? "Ctrl+Enter to submit" : "Start interview to submit solutions"}
+                {callStatus === CallStatus.ACTIVE
+                  ? "Ctrl+Enter to submit"
+                  : "Start interview to submit solutions"}
               </div>
             </div>
-            
+
             {/* Status Messages */}
             {chatMessages.length > 0 && (
               <div className="mt-3">
-                {chatMessages.slice(-1).map((msg, index) => (
-                  msg.role === "assistant" && (
-                    <div key={index} className="flex items-center gap-2 text-sm">
-                      <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                      <span className="text-green-400">{msg.content}</span>
-                    </div>
-                  )
-                ))}
+                {chatMessages.slice(-1).map(
+                  (msg, index) =>
+                    msg.role === "assistant" && (
+                      <div
+                        key={index}
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                        <span className="text-green-400">{msg.content}</span>
+                      </div>
+                    )
+                )}
               </div>
             )}
           </div>

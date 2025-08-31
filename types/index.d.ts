@@ -98,6 +98,7 @@ interface TechIconProps {
   techStack: string[];
 }
 
+<<<<<<< HEAD
 // Interview Evaluation Types
 export interface InterviewEvaluation {
   overallRating: number; // 1-10
@@ -128,4 +129,30 @@ export interface EvaluationResponse {
   evaluation: InterviewEvaluation;
   callId: string;
   evaluatedAt: string;
+=======
+interface CallLog {
+  id: string;
+  userId: string;
+  vapiCallId: string;
+  assistantId?: string;
+  status: string;
+  startedAt: string;
+  endedAt?: string;
+  duration?: number;
+  cost?: number;
+  costBreakdown?: {
+    llm?: number;
+    stt?: number;
+    tts?: number;
+    vapi?: number;
+    total?: number;
+  };
+  messageCount?: number;
+  hasRecording?: boolean;
+  hasTranscript?: boolean;
+  summary?: string;
+  analysis?: any;
+  createdAt: any;
+  updatedAt: any;
+>>>>>>> 6d83f6dcc41bf7f07538eb9a4057b8c1015e20f1
 }
