@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { getCurrentUser } from "@/lib/actions/auth.actions";
 import PageLayout from "@/components/PageLayout";
 import FeedbackDisplay from "@/components/FeedbackDisplay";
 import { User } from "@/types";
+
+// Force dynamic rendering for this page since it uses authentication
+export const dynamic = 'force-dynamic';
 
 interface CallData {
   id: string;
@@ -17,7 +20,7 @@ interface CallData {
   hasArtifact?: boolean;
 }
 
-export default function FeedbackPage() {
+function FeedbackPageContent() {
   const [user, setUser] = useState<User | null>(null);
   const [callData, setCallData] = useState<CallData[]>([]);
   const [selectedCall, setSelectedCall] = useState<CallData | null>(null);
@@ -161,5 +164,31 @@ export default function FeedbackPage() {
         </div>
       </div>
     </PageLayout>
+  );
+}
+
+// Loading component for Suspense fallback
+function FeedbackPageLoading() {
+  return (
+    <PageLayout>
+      <div className="min-h-screen p-6 pt-32">
+        <div className="animate-pulse">
+          <div className="h-8 bg-dark-200 rounded w-64 mb-8"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-32 bg-dark-200 rounded-lg"></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </PageLayout>
+  );
+}
+
+export default function FeedbackPage() {
+  return (
+    <Suspense fallback={<FeedbackPageLoading />}>
+      <FeedbackPageContent />
+    </Suspense>
   );
 }

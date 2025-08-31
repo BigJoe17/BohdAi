@@ -157,15 +157,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Extract conversation transcript
-    const transcript = extractConversationFromMessages(callData.artifact?.messages || []);
+    // Extract conversation transcript - messages are on the call object directly
+    const messages = callData.messages || [];
+    const transcript = extractConversationFromMessages(messages);
 
     console.log(`Call data structure:`, {
       hasArtifact: !!callData.artifact,
-      hasMessages: !!callData.artifact?.messages,
-      messageCount: callData.artifact?.messages?.length || 0,
+      hasMessages: !!messages.length,
+      messageCount: messages.length,
       transcriptLength: transcript.length,
-      callStatus: callData.status
+      callStatus: callData.status,
+      firstMessageType: messages[0]?.type || 'none'
     });
 
     if (!transcript || transcript.trim().length === 0) {
