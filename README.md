@@ -1,6 +1,9 @@
 # 🎯 BohdAi - AI-Powered Interview Platform
 
 > An intelligent interview preparation platform that helps candidates practice and improve their interview skills using cutting-edge AI technology.
+> Pensar Scan
+<img width="1432" height="764" alt="image" src="https://github.com/user-attachments/assets/60cc8552-f436-4843-886e-45ad27184855" />
+
 
 ## 🚀 Features
 
