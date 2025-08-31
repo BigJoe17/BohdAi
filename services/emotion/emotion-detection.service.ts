@@ -504,24 +504,7 @@ class EmotionDetectionService {
     return colorMap[emotion] || '#6B7280';
   }
 
-  /**
-   * Get emotion emoji for display
-   */
-  getEmotionEmoji(emotion: EmotionLabel): string {
-    const emojiMap: Record<EmotionLabel, string> = {
-      happy: '😊',
-      confident: '😎',
-      excited: '🤩',
-      calm: '😌',
-      neutral: '😐',
-      nervous: '😰',
-      stressed: '😫',
-      frustrated: '😤',
-      disappointed: '😞',
-      uncertain: '🤔'
-    };
-    return emojiMap[emotion] || '😐';
-  }
+
 }
 
 export const emotionDetectionService = new EmotionDetectionService();

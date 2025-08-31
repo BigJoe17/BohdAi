@@ -98,6 +98,38 @@ interface TechIconProps {
   techStack: string[];
 }
 
+<<<<<<< HEAD
+// Interview Evaluation Types
+export interface InterviewEvaluation {
+  overallRating: number; // 1-10
+  aspects: {
+    technicalKnowledge: AspectRating;
+    problemSolving: AspectRating;
+    communication: AspectRating;
+    criticalThinking: AspectRating;
+    codeQuality: AspectRating;
+    systemDesign: AspectRating;
+    behavioralFit: AspectRating;
+  };
+  strengths: string[];
+  areasForImprovement: string[];
+  recommendation: 'Strong Hire' | 'Hire' | 'No Hire' | 'Strong No Hire';
+  detailedFeedback: string;
+  confidenceLevel: number; // 1-10
+}
+
+export interface AspectRating {
+  score: number; // 1-10
+  feedback: string;
+  evidence: string[];
+}
+
+export interface EvaluationResponse {
+  success: boolean;
+  evaluation: InterviewEvaluation;
+  callId: string;
+  evaluatedAt: string;
+=======
 interface CallLog {
   id: string;
   userId: string;
@@ -122,4 +154,5 @@ interface CallLog {
   analysis?: any;
   createdAt: any;
   updatedAt: any;
+>>>>>>> 6d83f6dcc41bf7f07538eb9a4057b8c1015e20f1
 }

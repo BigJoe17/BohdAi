@@ -149,9 +149,8 @@ function testVisualizationHelpers() {
   const emotions = ['happy', 'confident', 'nervous', 'stressed', 'excited', 'calm'];
   
   emotions.forEach(emotion => {
-    const emoji = emotionDetectionService.getEmotionEmoji(emotion as any);
     const color = emotionDetectionService.getEmotionColor(emotion as any);
-    console.log(`${emotion}: ${emoji} (${color})`);
+    console.log(`${emotion}: ${color}`);
   });
 }
 
