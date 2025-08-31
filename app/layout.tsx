@@ -5,11 +5,13 @@ import "./globals.css";
 const monaSans = Mona_Sans({
   variable: "--font-mona-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
 const urbanist = Urbanist({
   variable: "--font-urbanist",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
