@@ -94,10 +94,9 @@ function CallDataPage() {
           const interviewNumber = totalInterviews - index;
           
           return (
-            <Link
+            <div
               key={call.id}
-              href={`/call-data/${call.id}`}
-              className="bg-dark-200 border border-gray-600 rounded-lg p-6 hover:border-primary-200 transition-colors cursor-pointer block"
+              className="bg-dark-200 border border-gray-600 rounded-lg p-6 hover:border-primary-200 transition-colors"
             >
               <div className="flex justify-between items-start mb-4">
                 <div>
@@ -126,16 +125,31 @@ function CallDataPage() {
                 )}
               </div>
 
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center mb-4">
                 <div className="text-gray-400 text-sm">
                   {call.messageCount || 0} messages
                 </div>
                 <div className="text-gray-400 text-sm flex items-center">
                   {call.hasArtifact ? '📄 Has Data' : '📝 Basic Info'}
-                  <span className="ml-2 text-primary-300">→</span>
                 </div>
               </div>
-            </Link>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2">
+                <Link
+                  href={`/call-data/${call.id}`}
+                  className="flex-1 bg-primary-600 hover:bg-primary-700 text-white text-center py-2 px-4 rounded-lg transition-colors text-sm"
+                >
+                  View Details
+                </Link>
+                <Link
+                  href={`/feedback?callId=${call.id}`}
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white text-center py-2 px-4 rounded-lg transition-colors text-sm"
+                >
+                  View Feedback
+                </Link>
+              </div>
+            </div>
           );
         })}
       </div>

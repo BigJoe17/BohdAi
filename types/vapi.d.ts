@@ -66,3 +66,43 @@ type Message =
   | TranscriptMessage
   | FunctionCallMessage
   | FunctionCallResultMessage;
+
+// Call data structure for saved calls
+interface SavedCallData {
+  id: string;
+  vapiCallId: string;
+  userId?: string;
+  assistantId?: string;
+  status: string;
+  startedAt: string;
+  endedAt?: string;
+  duration?: number;
+  cost?: number;
+  costBreakdown?: {
+    llm: number;
+    stt: number;
+    tts: number;
+    vapi: number;
+    total: number;
+  };
+  messages?: Message[];
+  transcript?: string;
+  summary?: string;
+  recordingUrl?: string;
+  transcriptUrl?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export { 
+  MessageTypeEnum, 
+  MessageRoleEnum, 
+  TranscriptMessageTypeEnum,
+  BaseMessage,
+  TranscriptMessage,
+  FunctionCallMessage,
+  FunctionCallResultMessage,
+  EnhancedMessage,
+  Message,
+  SavedCallData
+};

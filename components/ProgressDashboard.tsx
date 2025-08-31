@@ -9,7 +9,35 @@ import {
   Star, Flame, Users, Clock, ChevronRight,
   Zap, BookOpen, Brain, Code, MessageSquare
 } from 'lucide-react';
-import { gamificationService, UserProgress, Badge as GameBadge } from '@/services/gamification/gamification.service';
+
+// Types (moved locally to avoid server imports)
+interface UserProgress {
+  userId: string;
+  level: number;
+  experiencePoints: number;
+  nextLevelPoints: number;
+  currentStreak: number;
+  longestStreak: number;
+  totalPoints: number;
+  earnedBadges: string[];
+  totalInterviews: number;
+  averageScore: number;
+  totalMinutesSpent: number;
+  lastActivity: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface GameBadge {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+  category: string;
+  points: number;
+  criteria: any;
+}
 
 interface ProgressDashboardProps {
   userId: string;
@@ -29,10 +57,17 @@ export default function ProgressDashboard({ userId }: ProgressDashboardProps) {
     try {
       setLoading(true);
       
+      // Use API calls instead of direct service imports
+      const [progressResponse, badgesResponse, leaderboardResponse] = await Promise.all([
+        fetch(`/api/v2/gamification/progress?userId=${userId}`),
+        fetch('/api/v2/gamification/badges'),
+        fetch('/api/v2/gamification/leaderboard?limit=10')
+      ]);
+
       const [userProgress, userBadges, leaderboardData] = await Promise.all([
-        gamificationService.getUserProgress(userId),
-        gamificationService.getBadgesByCategory(),
-        gamificationService.getUserLeaderboard(10)
+        progressResponse.ok ? progressResponse.json() : null,
+        badgesResponse.ok ? badgesResponse.json() : [],
+        leaderboardResponse.ok ? leaderboardResponse.json() : []
       ]);
 
       setProgress(userProgress);

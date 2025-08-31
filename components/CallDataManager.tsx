@@ -107,7 +107,7 @@ export function CallDataManager({ userId, assistantId }: CallDataManagerProps) {
             </Button>
           </div>
         ) : (
-          callData.map((call) => (
+          callData.map((call: SavedCallData) => (
             <Card key={call.id} className="bg-dark-200 border-light-800">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
@@ -194,6 +194,16 @@ export function CallDataManager({ userId, assistantId }: CallDataManagerProps) {
                       size="sm"
                     >
                       Show Details
+                    </Button>
+
+                    <Button
+                      onClick={() => router.push(`/feedback?callId=${call.vapiCallId}`)}
+                      variant="outline"
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700 text-white border-green-600"
+                    >
+                      <MessageSquare className="w-4 h-4 mr-2" />
+                      View Feedback
                     </Button>
                   </div>
                 </div>

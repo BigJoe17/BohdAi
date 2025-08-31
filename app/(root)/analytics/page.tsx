@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { getCurrentUser } from "@/lib/actions/auth.actions";
-import AnalyticsDashboard from "@/components/AnalyticsDashboard";
 import PageLayout from "@/components/PageLayout";
+import AnalyticsDashboard from "@/components/AnalyticsDashboard";
 import { User } from "@/types";
 
 export default function AnalyticsPage() {

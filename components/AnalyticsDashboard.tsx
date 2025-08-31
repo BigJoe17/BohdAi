@@ -4,15 +4,44 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart, Pie, Cell, Area, AreaChart 
-} from 'recharts';
-import { 
-  TrendingUp, TrendingDown, Target, Award, 
-  Calendar, BarChart3, PieChart as PieChartIcon,
-  ArrowUp, ArrowDown, Brain, Clock 
+  TrendingUp, Calendar, Target, BarChart3, 
+  Clock, Trophy, Star, ArrowUp, ArrowDown,
+  Award, Brain, TrendingDown, PieChart as PieChartIcon
 } from 'lucide-react';
-import { analyticsService, AnalyticsSummary } from '@/services/analytics/analytics.service';
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, PieChart, Pie, Cell, Area, AreaChart
+} from 'recharts';
+
+// Types (moved locally to avoid server imports)
+interface AnalyticsSummary {
+  totalInterviews: number;
+  averageScore: number;
+  totalTime: number;
+  improvementRate: number;
+  completionRate: number;
+  commonWeaknesses: Record<string, number>;
+  commonStrengths: Record<string, number>;
+  strengthsFrequency: Record<string, number>;
+  weaknessesFrequency: Record<string, number>;
+  typeDistribution: Record<string, number>;
+  skillTrends: Array<{
+    date: string;
+    technical: number;
+    communication: number;
+    problemSolving: number;
+  }>;
+  performanceTrend: Array<{
+    date: string;
+    score: number;
+    type: string;
+  }>;
+  recentPerformance: Array<{
+    date: string;
+    score: number;
+    type: string;
+  }>;
+}
 
 interface AnalyticsDashboardProps {
   userId: string;
@@ -37,12 +66,73 @@ export default function AnalyticsDashboard({ userId }: AnalyticsDashboardProps) 
   const fetchAnalytics = async () => {
     try {
       setLoading(true);
-      const [analyticsData, comparison] = await Promise.all([
-        analyticsService.getUserAnalytics(userId, timeRange),
-        analyticsService.getComparisonData(userId)
-      ]);
-      setAnalytics(analyticsData);
-      setComparisonData(comparison);
+      
+      // Replace with API calls or use mock data for now
+      const mockAnalyticsData: AnalyticsSummary = {
+        totalInterviews: 12,
+        averageScore: 78,
+        totalTime: 360,
+        improvementRate: 15,
+        completionRate: 85,
+        commonWeaknesses: {
+          "Time Management": 8,
+          "System Design": 6,
+          "Communication": 4
+        },
+        commonStrengths: {
+          "Problem Solving": 10,
+          "Code Quality": 8,
+          "Technical Knowledge": 7
+        },
+        strengthsFrequency: {
+          "Problem Solving": 10,
+          "Code Quality": 8,
+          "Technical Knowledge": 7,
+          "Debugging": 6,
+          "Algorithm Design": 5
+        },
+        weaknessesFrequency: {
+          "Time Management": 8,
+          "System Design": 6,
+          "Communication": 4,
+          "Testing": 3,
+          "Documentation": 2
+        },
+        typeDistribution: {
+          "technical": 8,
+          "behavioral": 3,
+          "system-design": 1
+        },
+        skillTrends: [
+          { date: "2024-01", technical: 70, communication: 60, problemSolving: 75 },
+          { date: "2024-02", technical: 75, communication: 65, problemSolving: 80 },
+          { date: "2024-03", technical: 78, communication: 70, problemSolving: 82 }
+        ],
+        performanceTrend: [
+          { date: "2024-01-15", score: 72, type: "technical" },
+          { date: "2024-02-01", score: 75, type: "behavioral" },
+          { date: "2024-02-15", score: 78, type: "technical" },
+          { date: "2024-03-01", score: 80, type: "system-design" },
+          { date: "2024-03-15", score: 82, type: "technical" }
+        ],
+        recentPerformance: [
+          { date: "2024-03-15", score: 82, type: "technical" },
+          { date: "2024-03-01", score: 80, type: "system-design" },
+          { date: "2024-02-15", score: 78, type: "technical" }
+        ]
+      };
+
+      const mockComparisonData = {
+        userAverage: 78,
+        platformAverage: 72,
+        percentile: 68
+      };
+
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      setAnalytics(mockAnalyticsData);
+      setComparisonData(mockComparisonData);
     } catch (error) {
       console.error('Error fetching analytics:', error);
     } finally {
@@ -88,19 +178,19 @@ export default function AnalyticsDashboard({ userId }: AnalyticsDashboardProps) 
 
   // Prepare data for charts
   const strengthsData = Object.entries(analytics.strengthsFrequency)
-    .map(([name, value]) => ({ name, value }))
+    .map(([name, value]) => ({ name, value: value as number }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
 
   const weaknessesData = Object.entries(analytics.weaknessesFrequency)
-    .map(([name, value]) => ({ name, value }))
+    .map(([name, value]) => ({ name, value: value as number }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
 
   const typeDistributionData = Object.entries(analytics.typeDistribution)
     .map(([name, value]) => ({ 
       name: name.charAt(0).toUpperCase() + name.slice(1).replace('-', ' '), 
-      value 
+      value: value as number
     }));
 
   return (

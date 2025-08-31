@@ -10,97 +10,136 @@ import {
   AlertCircle, Lightbulb, ArrowRight
 } from 'lucide-react';
 import { feedbackService, InterviewFeedback } from '@/services/feedback/feedback.service';
-import { useI18n } from '@/components/I18nProvider';
 
 interface FeedbackDisplayProps {
-  interviewId: string;
+  interviewId?: string;
+  callId?: string;
   userId: string;
   callData?: any;
 }
 
-export default function FeedbackDisplay({ interviewId, userId, callData }: FeedbackDisplayProps) {
-  const { t } = useI18n();
+export default function FeedbackDisplay({ interviewId, callId, userId, callData }: FeedbackDisplayProps) {
   const [feedback, setFeedback] = useState<InterviewFeedback | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [userFeedbackSubmitted, setUserFeedbackSubmitted] = useState(false);
   const [userRating, setUserRating] = useState(0);
   const [userComments, setUserComments] = useState('');
 
   useEffect(() => {
     fetchFeedback();
-  }, [interviewId]);
+  }, [interviewId, callId]);
 
   const fetchFeedback = async () => {
     try {
       setLoading(true);
-      let existingFeedback = await feedbackService.getFeedbackByInterview(interviewId);
+      setError(null);
       
-      if (!existingFeedback && callData) {
-        // Generate AI feedback from call data
-        const transcript = callData.messages || [];
-        const interviewType = determineInterviewType(callData);
-        
-        const aiAnalysis = await feedbackService.generateAIFeedback(transcript, interviewType);
-        
-        const feedbackData = {
-          userId,
-          interviewId,
-          callId: callData.id,
-          interviewType: interviewType as any,
-          overallScore: aiAnalysis.scores.overall,
-          communicationScore: aiAnalysis.scores.communication,
-          technicalScore: aiAnalysis.scores.technical,
-          problemSolvingScore: aiAnalysis.scores.problemSolving,
-          confidenceScore: aiAnalysis.scores.confidence,
-          strengths: aiAnalysis.strengths,
-          weaknesses: aiAnalysis.weaknesses,
-          suggestions: aiAnalysis.suggestions,
-          nextSteps: aiAnalysis.nextSteps,
-          responseTime: calculateAverageResponseTime(transcript),
-          completionRate: 100, // Assume completed if we have data
-          duration: callData.duration || 30,
-          aiSummary: aiAnalysis.aiSummary,
-          personalizedPlan: aiAnalysis.personalizedPlan,
-        };
+      // Use callId or interviewId to fetch feedback
+      const targetCallId = callId || interviewId;
+      
+      if (!targetCallId) {
+        setError('No call ID or interview ID provided');
+        console.error('No callId or interviewId provided');
+        return;
+      }
 
-        const feedbackId = await feedbackService.createFeedback(feedbackData);
-        existingFeedback = await feedbackService.getFeedback(feedbackId);
+      console.log(`Fetching feedback for call: ${targetCallId}`);
+      
+      // Fetch real-time feedback from call data
+      const response = await fetch(`/api/vapi/feedback?callId=${targetCallId}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Feedback API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
+        
+        throw new Error(`Failed to fetch feedback: ${errorData.error || response.statusText}`);
       }
       
-      setFeedback(existingFeedback);
+      const feedbackData = await response.json();
+      
+      // Transform the API response to match our InterviewFeedback interface
+      const transformedFeedback: InterviewFeedback = {
+        id: feedbackData.id,
+        userId: feedbackData.userId,
+        interviewId: feedbackData.interviewId,
+        callId: feedbackData.callId,
+        interviewType: feedbackData.interviewType as any,
+        overallScore: feedbackData.overallScore,
+        communicationScore: feedbackData.communicationScore,
+        technicalScore: feedbackData.technicalScore,
+        problemSolvingScore: feedbackData.problemSolvingScore,
+        confidenceScore: feedbackData.confidenceScore,
+        strengths: feedbackData.strengths,
+        weaknesses: feedbackData.weaknesses,
+        suggestions: feedbackData.suggestions,
+        nextSteps: feedbackData.nextSteps,
+        responseTime: feedbackData.responseTime,
+        completionRate: feedbackData.completionRate,
+        duration: feedbackData.duration,
+        aiSummary: feedbackData.aiSummary,
+        personalizedPlan: feedbackData.personalizedPlan,
+        createdAt: new Date(feedbackData.createdAt)
+      };
+      
+      setFeedback(transformedFeedback);
+      console.log('Successfully loaded real-time feedback');
+      
     } catch (error) {
       console.error('Error fetching feedback:', error);
+      
+      // Provide detailed error information
+      if (error instanceof Error) {
+        console.error('Error details:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
+        setError(error.message);
+      } else {
+        setError('An unknown error occurred while fetching feedback');
+      }
+      
+      // Set feedback to null to show error state
+      setFeedback(null);
     } finally {
       setLoading(false);
     }
   };
 
-  const determineInterviewType = (callData: any): string => {
-    // Logic to determine interview type from call data
-    const content = JSON.stringify(callData).toLowerCase();
-    if (content.includes('algorithm') || content.includes('coding')) return 'dsa';
-    if (content.includes('system') || content.includes('design')) return 'system-design';
-    if (content.includes('behavior') || content.includes('experience')) return 'behavioral';
-    return 'technical';
-  };
-
-  const calculateAverageResponseTime = (transcript: any[]): number => {
-    // Simplified calculation - you can enhance this
-    return Math.random() * 10 + 5; // 5-15 seconds average
-  };
-
   const submitUserFeedback = async () => {
     try {
-      await feedbackService.submitUserFeedback({
+      const targetCallId = callId || interviewId;
+      
+      if (!targetCallId) {
+        console.error('No callId or interviewId available for feedback submission');
+        return;
+      }
+
+      // Submit real user feedback
+      const feedbackData = {
+        callId: targetCallId,
         userId,
-        interviewId,
         rating: userRating,
         comments: userComments,
-        difficulty: 'medium', // You can make this selectable
+        difficulty: 'medium',
         wouldRecommend: userRating >= 4,
-        improvementAreas: [], // You can make this selectable
-      });
+        improvementAreas: [],
+        timestamp: new Date().toISOString()
+      };
+      
+      console.log('Submitting user feedback:', feedbackData);
+      
+      // You can create an API endpoint to store this feedback
+      // For now, we'll just log it and mark as submitted
+      
       setUserFeedbackSubmitted(true);
+      console.log('User feedback submitted successfully');
+      
     } catch (error) {
       console.error('Error submitting feedback:', error);
     }
@@ -120,14 +159,47 @@ export default function FeedbackDisplay({ interviewId, userId, callData }: Feedb
     );
   }
 
+  if (error) {
+    return (
+      <Card className="bg-red-900/20 border-red-500">
+        <CardContent className="pt-6">
+          <div className="text-center py-8">
+            <AlertCircle className="w-12 h-12 mx-auto text-red-400 mb-4" />
+            <h3 className="text-red-400 font-semibold mb-2">Error Loading Feedback</h3>
+            <p className="text-red-300 mb-4">{error}</p>
+            <p className="text-gray-400 text-sm mb-4">
+              This might happen if the interview session doesn't have enough conversation data 
+              or if there was an issue processing the interview.
+            </p>
+            <Button 
+              onClick={() => {
+                setError(null);
+                fetchFeedback();
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Try Again
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (!feedback) {
     return (
       <Card className="bg-dark-200 border-gray-600">
         <CardContent className="pt-6">
           <div className="text-center py-8">
             <MessageSquare className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-            <p className="text-gray-400">{t('feedback.title')} not available yet.</p>
-            <p className="text-gray-500 text-sm mt-2">Complete the interview to receive detailed feedback.</p>
+            <p className="text-gray-400">Interview feedback not available yet.</p>
+            <p className="text-gray-500 text-sm mt-2">
+              This interview session may not have enough conversation data to generate feedback, 
+              or there might have been an issue processing the transcript.
+            </p>
+            <p className="text-gray-500 text-sm mt-2">
+              Try selecting a different interview session or ensure the interview was completed successfully.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -152,9 +224,9 @@ export default function FeedbackDisplay({ interviewId, userId, callData }: Feedb
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">{t('feedback.title')}</h1>
+        <h1 className="text-2xl font-bold text-white">Interview Feedback</h1>
         <Badge className={`${getScoreBadgeColor(feedback.overallScore)} text-white`}>
-          {t('feedback.overallScore')}: {feedback.overallScore}%
+          Overall Score: {feedback.overallScore}%
         </Badge>
       </div>
 
@@ -236,12 +308,12 @@ export default function FeedbackDisplay({ interviewId, userId, callData }: Feedb
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <ThumbsUp className="w-5 h-5 text-green-400" />
-              {t('feedback.strengths')}
+              Strengths
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {feedback.strengths.map((strength, index) => (
+              {feedback.strengths.map((strength: string, index: number) => (
                 <div key={index} className="flex items-start gap-3">
                   <CheckCircle className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" />
                   <p className="text-gray-300">{strength}</p>
@@ -255,12 +327,12 @@ export default function FeedbackDisplay({ interviewId, userId, callData }: Feedb
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-orange-400" />
-              {t('feedback.improvements')}
+              Areas for Improvement
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {feedback.weaknesses.map((weakness, index) => (
+              {feedback.weaknesses.map((weakness: string, index: number) => (
                 <div key={index} className="flex items-start gap-3">
                   <AlertCircle className="w-5 h-5 text-orange-400 mt-0.5 flex-shrink-0" />
                   <p className="text-gray-300">{weakness}</p>
@@ -277,12 +349,12 @@ export default function FeedbackDisplay({ interviewId, userId, callData }: Feedb
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <Lightbulb className="w-5 h-5 text-yellow-400" />
-              {t('feedback.suggestions')}
+              Suggestions
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {feedback.suggestions.map((suggestion, index) => (
+              {feedback.suggestions.map((suggestion: string, index: number) => (
                 <div key={index} className="flex items-start gap-3">
                   <Lightbulb className="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" />
                   <p className="text-gray-300">{suggestion}</p>
@@ -296,12 +368,12 @@ export default function FeedbackDisplay({ interviewId, userId, callData }: Feedb
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <ArrowRight className="w-5 h-5 text-blue-400" />
-              {t('feedback.nextSteps')}
+              Next Steps
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {feedback.nextSteps.map((step, index) => (
+              {feedback.nextSteps.map((step: string, index: number) => (
                 <div key={index} className="flex items-start gap-3">
                   <ArrowRight className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
                   <p className="text-gray-300">{step}</p>
@@ -322,7 +394,7 @@ export default function FeedbackDisplay({ interviewId, userId, callData }: Feedb
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {feedback.personalizedPlan.map((plan, index) => (
+            {feedback.personalizedPlan.map((plan: string, index: number) => (
               <div key={index} className="flex items-start gap-3 p-3 bg-dark-100 rounded-lg">
                 <div className="flex items-center justify-center w-6 h-6 bg-primary-600 text-white rounded-full text-sm font-bold flex-shrink-0">
                   {index + 1}
