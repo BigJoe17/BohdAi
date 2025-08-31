@@ -243,7 +243,8 @@ class EmotionDetectionService {
       // Extract JSON from response
       const jsonMatch = result.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('Invalid response format from Gemini');
+        // throw new Error('Invalid response format from Gemini');
+        
       }
 
       const analysis = JSON.parse(jsonMatch[0]);

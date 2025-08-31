@@ -621,11 +621,11 @@ function Agent({ userName, userId, type }: AgentProps) {
               <div className="bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-xl p-4 border border-purple-400/30 backdrop-blur-sm">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">
+                    {/* <span className="text-2xl">
                       {emotionDetectionService.getEmotionEmoji(
                         currentEmotion.emotion
                       )}
-                    </span>
+                    </span> */}
                     <div>
                       <p className="text-sm font-medium text-white capitalize">
                         {currentEmotion.emotion}
