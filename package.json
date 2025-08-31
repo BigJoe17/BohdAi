@@ -24,7 +24,6 @@
     "i18next": "^25.4.2",
     "i18next-browser-languagedetector": "^8.2.0",
     "lucide-react": "^0.511.0",
-    "next": "15.3.3",
     "next-themes": "^0.4.6",
     "ogl": "^1.0.11",
     "react": "^19.0.0",
@@ -37,7 +36,8 @@
     "tailwind-merge": "^3.3.0",
     "tailwindcss-animate": "^1.0.7",
     "tailwindcss-animated": "^2.0.0",
-    "zod": "^3.25.42"
+    "zod": "^3.25.42",
+    "next": "^15.4.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
