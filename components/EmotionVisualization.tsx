@@ -132,9 +132,9 @@ export function EmotionTimeline({ emotions, duration = 300, className }: Emotion
                   </div>
                 </div>
                 
-                {/* Emoji indicator */}
-                <div className="text-xs text-center mt-1">
-                  {emotionDetectionService.getEmotionEmoji(segment.emotion as any)}
+                {/* Emotion label */}
+                <div className="text-xs text-center mt-1 text-gray-300 capitalize">
+                  {segment.emotion}
                 </div>
               </div>
             );
@@ -195,9 +195,10 @@ export function EmotionVisualization({ emotionAnalysis, className }: EmotionVisu
         {/* Dominant Emotion */}
         <div className="bg-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-2xl">
-              {emotionDetectionService.getEmotionEmoji(dominantEmotion as any)}
-            </span>
+            <div 
+              className="w-4 h-4 rounded-full" 
+              style={{backgroundColor: emotionDetectionService.getEmotionColor(dominantEmotion as any)}}
+            ></div>
             <div>
               <p className="text-sm text-gray-400">Dominant Emotion</p>
               <p className="text-white font-medium capitalize">{dominantEmotion}</p>
@@ -266,9 +267,10 @@ export function EmotionVisualization({ emotionAnalysis, className }: EmotionVisu
               const percentage = (count / emotions.length) * 100;
               return (
                 <div key={emotion} className="flex items-center gap-3">
-                  <span className="text-lg">
-                    {emotionDetectionService.getEmotionEmoji(emotion as any)}
-                  </span>
+                  <div 
+                    className="w-3 h-3 rounded-full flex-shrink-0" 
+                    style={{backgroundColor: emotionDetectionService.getEmotionColor(emotion as any)}}
+                  ></div>
                   <div className="flex-1">
                     <div className="flex justify-between items-center mb-1">
                       <span className="text-sm text-gray-300 capitalize">{emotion}</span>

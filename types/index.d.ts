@@ -97,3 +97,35 @@ interface InterviewFormProps {
 interface TechIconProps {
   techStack: string[];
 }
+
+// Interview Evaluation Types
+export interface InterviewEvaluation {
+  overallRating: number; // 1-10
+  aspects: {
+    technicalKnowledge: AspectRating;
+    problemSolving: AspectRating;
+    communication: AspectRating;
+    criticalThinking: AspectRating;
+    codeQuality: AspectRating;
+    systemDesign: AspectRating;
+    behavioralFit: AspectRating;
+  };
+  strengths: string[];
+  areasForImprovement: string[];
+  recommendation: 'Strong Hire' | 'Hire' | 'No Hire' | 'Strong No Hire';
+  detailedFeedback: string;
+  confidenceLevel: number; // 1-10
+}
+
+export interface AspectRating {
+  score: number; // 1-10
+  feedback: string;
+  evidence: string[];
+}
+
+export interface EvaluationResponse {
+  success: boolean;
+  evaluation: InterviewEvaluation;
+  callId: string;
+  evaluatedAt: string;
+}

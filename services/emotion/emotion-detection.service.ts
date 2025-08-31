@@ -53,7 +53,7 @@ class EmotionDetectionService {
   private model: any;
 
   constructor() {
-    const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY;
+    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_GENERATIVE_AI_API_KEY;
     if (!apiKey) {
       console.warn('Google AI API key not found. Emotion detection will use fallback analysis.');
     }
@@ -344,24 +344,7 @@ class EmotionDetectionService {
     return colorMap[emotion] || '#6B7280';
   }
 
-  /**
-   * Get emotion emoji for display
-   */
-  getEmotionEmoji(emotion: EmotionLabel): string {
-    const emojiMap: Record<EmotionLabel, string> = {
-      happy: '😊',
-      confident: '😎',
-      excited: '🤩',
-      calm: '😌',
-      neutral: '😐',
-      nervous: '😰',
-      stressed: '😫',
-      frustrated: '😤',
-      disappointed: '😞',
-      uncertain: '🤔'
-    };
-    return emojiMap[emotion] || '😐';
-  }
+
 }
 
 export const emotionDetectionService = new EmotionDetectionService();
